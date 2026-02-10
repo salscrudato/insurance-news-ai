@@ -28,14 +28,20 @@ const MAX_BOOKMARKS = 100
 // ============================================================================
 
 /**
- * Fetch bookmarks for the current user (limited to prevent excessive reads)
+ * Fetch bookmarks for the current user (limited to prevent excessive reads).
+ *
+ * When auth is resolved but there is no Firebase user (e.g. local guest mode,
+ * or anonymous without a real Firebase UID), the query is still enabled and
+ * immediately returns an empty array so the UI never gets stuck in a loading
+ * state.
  */
 export function useBookmarks() {
   const { user, isLoading: authLoading } = useAuth()
 
   return useQuery({
-    queryKey: ["bookmarks", user?.uid],
+    queryKey: ["bookmarks", user?.uid ?? "none"],
     queryFn: async () => {
+      // No Firebase user → nothing to fetch
       if (!user) return []
 
       const bookmarksRef = collection(db, "users", user.uid, "bookmarks")
@@ -47,19 +53,22 @@ export function useBookmarks() {
         articleId: doc.id,
       })) as Bookmark[]
     },
-    enabled: !authLoading && !!user,
+    // Enable as soon as auth state is resolved — even when user is null
+    // so the query settles to [] and isLoading becomes false.
+    enabled: !authLoading,
     staleTime: 1000 * 60 * 5, // 5 minutes
   })
 }
 
 /**
- * Check if a specific article is bookmarked
+ * Check if a specific article is bookmarked.
+ * Resolves to `false` immediately when there is no Firebase user.
  */
 export function useIsBookmarked(articleId: string | undefined) {
   const { user, isLoading: authLoading } = useAuth()
 
   return useQuery({
-    queryKey: ["bookmark", user?.uid, articleId],
+    queryKey: ["bookmark", user?.uid ?? "none", articleId],
     queryFn: async () => {
       if (!user || !articleId) return false
       
@@ -67,7 +76,9 @@ export function useIsBookmarked(articleId: string | undefined) {
       const snapshot = await getDoc(bookmarkRef)
       return snapshot.exists()
     },
-    enabled: !authLoading && !!user && !!articleId,
+    // Enable when auth is resolved AND we have an articleId.
+    // When user is null the queryFn returns false immediately.
+    enabled: !authLoading && !!articleId,
     staleTime: 1000 * 60 * 5, // 5 minutes
   })
 }

@@ -137,7 +137,7 @@ function BookmarkRow({ bookmark, onSelect, onRemove, isRemoving }: BookmarkRowPr
 
 export function BookmarksPage() {
   const navigate = useNavigate()
-  const { isLoading: authLoading } = useAuth()
+  const { isLoading: authLoading, user } = useAuth()
   const { data: bookmarks, isLoading: bookmarksLoading } = useBookmarks()
   const toggleBookmark = useToggleBookmark()
 
@@ -157,7 +157,10 @@ export function BookmarksPage() {
     enabled: !!selectedBookmark,
   })
 
-  const isLoading = authLoading || bookmarksLoading
+  // If the user is a local guest (no Firebase account), there are no bookmarks
+  // to fetch — skip straight to empty state, never show skeleton.
+  // Also, once auth is resolved and there's no user, don't wait on the query.
+  const isLoading = authLoading || (!!user && bookmarksLoading)
 
   const handleSelectBookmark = (bookmark: Bookmark) => {
     hapticMedium()

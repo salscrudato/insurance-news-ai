@@ -117,8 +117,20 @@ export function SettingsPage() {
         description: "Your account and all associated data have been permanently removed.",
       })
       setShowDeleteSheet(false)
-      // Sign out locally to clear any cached state
-      await signOut()
+
+      // The callable already deleted the Firebase Auth user server-side.
+      // Calling signOut() would try to talk to the native Firebase SDK with
+      // an already-invalidated token, which hangs on iOS.
+      // Instead, sign out defensively: swallow errors since the auth user is
+      // already gone and we just need to clear local state.
+      try {
+        await signOut()
+      } catch {
+        // Expected — the server already deleted the auth user, so the
+        // native/web SDK sign-out may fail. That's fine.
+        console.log("[DeleteAccount] signOut after deletion failed (expected)")
+      }
+
       navigate("/auth", { replace: true })
     } catch (error) {
       console.error("Account deletion failed:", error)

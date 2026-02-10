@@ -520,6 +520,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   // Sign out
+  // Designed to be resilient — always clears local state even if Firebase SDK
+  // calls fail (e.g., after server-side account deletion).
   const signOut = useCallback(async () => {
     const isNative = Capacitor.isNativePlatform()
 
@@ -527,16 +529,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(LOCAL_GUEST_KEY)
     setIsLocalGuest(false)
 
-    // Sign out of Firebase if authenticated
-    if (user) {
-      if (isNative) {
-        // On native, use the native plugin's signOut
-        console.log("[AuthContext] Native: calling signOut...")
-        await FirebaseAuthentication.signOut()
-        console.log("[AuthContext] Native: signOut completed")
-      } else {
-        // On web, use the web SDK's signOut
-        await firebaseSignOut(auth)
+    // Always clear local user state immediately so the UI navigates away
+    // regardless of whether the SDK signOut succeeds.
+    const hadUser = !!user
+    setUser(null)
+
+    // Sign out of Firebase if we had an authenticated user
+    if (hadUser) {
+      // Wrap SDK calls in a timeout + try-catch so they can never hang.
+      // If the auth user was already deleted server-side, the native SDK
+      // signOut may stall or throw.
+      const timeoutMs = 4000
+      const withTimeout = <T,>(p: Promise<T>): Promise<T> =>
+        Promise.race([
+          p,
+          new Promise<T>((_, reject) =>
+            setTimeout(() => reject(new Error("signOut timeout")), timeoutMs)
+          ),
+        ])
+
+      try {
+        if (isNative) {
+          console.log("[AuthContext] Native: calling signOut...")
+          await withTimeout(FirebaseAuthentication.signOut())
+          console.log("[AuthContext] Native: signOut completed")
+        } else {
+          await withTimeout(firebaseSignOut(auth))
+        }
+      } catch (error) {
+        // Don't block on signOut failures — the user is already gone locally
+        console.warn("[AuthContext] signOut SDK call failed (may be expected after account deletion):", error)
       }
     }
   }, [user])
