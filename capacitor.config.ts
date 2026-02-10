@@ -32,6 +32,12 @@ const config: CapacitorConfig = {
       // iOS keyboard style
       style: 'LIGHT',
     },
+    FirebaseAuthentication: {
+      // Use native Firebase Auth SDK for native platforms
+      skipNativeAuth: false,
+      // Auth providers - phone and Google
+      providers: ['phone', 'google.com'],
+    },
   },
 };
 

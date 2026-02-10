@@ -1,10 +1,8 @@
 /**
- * AppLogo - Shield logo component with gradient
+ * AppLogo - Shield outline logo component with gradient stroke
  *
- * Clean, modern shield representing protection and trust.
- *
- * The gradient flows from deep blue (#0055D4) through accent blue (#0A84FF)
- * to sky blue (#5AC8FA), creating a refined, Apple-inspired appearance.
+ * Clean, modern shield outline representing protection and trust.
+ * Stroke-based design with a subtle Apple-inspired blue gradient.
  */
 
 import { cn } from "@/lib/utils"
@@ -39,6 +37,9 @@ export function AppLogo({
   // Generate unique gradient ID to avoid conflicts when multiple logos render
   const gradientId = `logo-gradient-${Math.random().toString(36).slice(2, 9)}`
   
+  // Scale stroke width relative to render size for crisp rendering at all sizes
+  const strokeWidth = pixelSize <= 24 ? 56 : pixelSize <= 40 ? 52 : 48
+  
   return (
     <svg
       width={pixelSize}
@@ -48,7 +49,7 @@ export function AppLogo({
       xmlns="http://www.w3.org/2000/svg"
       className={cn(
         "shrink-0",
-        glow && "drop-shadow-[0_2px_8px_rgba(10,132,255,0.35)]",
+        glow && "drop-shadow-[0_2px_12px_rgba(0,122,255,0.3)]",
         rounded && "rounded-[22%]",
         className
       )}
@@ -57,29 +58,35 @@ export function AppLogo({
       <defs>
         <linearGradient
           id={gradientId}
-          x1="260"
-          y1="180"
-          x2="780"
-          y2="920"
+          x1="512"
+          y1="140"
+          x2="512"
+          y2="900"
           gradientUnits="userSpaceOnUse"
         >
-          <stop offset="0%" stopColor="#0055D4" />
-          <stop offset="50%" stopColor="#0A84FF" />
-          <stop offset="100%" stopColor="#5AC8FA" />
+          <stop offset="0%" stopColor="#5AC8FA" />
+          <stop offset="50%" stopColor="#007AFF" />
+          <stop offset="100%" stopColor="#0055D4" />
         </linearGradient>
       </defs>
       
-      {/* Shield path */}
+      {/* Shield outline path */}
       <path
-        d="M512 176
-           C654 176 776 248 776 380
-           V556
-           C776 702 654 824 512 904
-           C370 824 248 702 248 556
-           V380
-           C248 248 370 176 512 176
-           Z"
-        fill={`url(#${gradientId})`}
+        d="M512 160
+           C400 160 310 195 270 240
+           C240 274 230 310 230 360
+           L230 500
+           C230 600 270 690 340 760
+           C390 810 450 850 512 890
+           C574 850 634 810 684 760
+           C754 690 794 600 794 500
+           L794 360
+           C794 310 784 274 754 240
+           C714 195 624 160 512 160Z"
+        fill="none"
+        stroke={`url(#${gradientId})`}
+        strokeWidth={strokeWidth}
+        strokeLinejoin="round"
       />
     </svg>
   )
@@ -87,7 +94,7 @@ export function AppLogo({
 
 /**
  * AppLogoMark - Compact version for tight spaces
- * Same shield but optimized viewBox for tighter cropping
+ * Same shield outline but optimized viewBox for tighter cropping
  */
 export function AppLogoMark({ 
   size = 24, 
@@ -102,7 +109,7 @@ export function AppLogoMark({
     <svg
       width={size}
       height={size}
-      viewBox="200 140 624 800"
+      viewBox="180 120 664 820"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={cn("shrink-0", className)}
@@ -111,30 +118,35 @@ export function AppLogoMark({
       <defs>
         <linearGradient
           id={gradientId}
-          x1="260"
-          y1="180"
-          x2="780"
-          y2="920"
+          x1="512"
+          y1="140"
+          x2="512"
+          y2="900"
           gradientUnits="userSpaceOnUse"
         >
-          <stop offset="0%" stopColor="#0055D4" />
-          <stop offset="50%" stopColor="#0A84FF" />
-          <stop offset="100%" stopColor="#5AC8FA" />
+          <stop offset="0%" stopColor="#5AC8FA" />
+          <stop offset="50%" stopColor="#007AFF" />
+          <stop offset="100%" stopColor="#0055D4" />
         </linearGradient>
       </defs>
       
       <path
-        d="M512 176
-           C654 176 776 248 776 380
-           V556
-           C776 702 654 824 512 904
-           C370 824 248 702 248 556
-           V380
-           C248 248 370 176 512 176
-           Z"
-        fill={`url(#${gradientId})`}
+        d="M512 160
+           C400 160 310 195 270 240
+           C240 274 230 310 230 360
+           L230 500
+           C230 600 270 690 340 760
+           C390 810 450 850 512 890
+           C574 850 634 810 684 760
+           C754 690 794 600 794 500
+           L794 360
+           C794 310 784 274 754 240
+           C714 195 624 160 512 160Z"
+        fill="none"
+        stroke={`url(#${gradientId})`}
+        strokeWidth={size <= 20 ? 56 : 48}
+        strokeLinejoin="round"
       />
     </svg>
   )
 }
-

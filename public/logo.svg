@@ -1,55 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <!-- Primary gradient - refined Apple-style blue -->
-    <linearGradient id="shieldGradient" x1="512" y1="120" x2="512" y2="920" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#3B82F6"/>
-      <stop offset="100%" stop-color="#1D4ED8"/>
+    <linearGradient id="shieldStrokeGradient" x1="512" y1="140" x2="512" y2="900" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#5AC8FA"/>
+      <stop offset="50%" stop-color="#007AFF"/>
+      <stop offset="100%" stop-color="#0055D4"/>
     </linearGradient>
-
-    <!-- Subtle top highlight for depth -->
-    <linearGradient id="highlightGradient" x1="512" y1="120" x2="512" y2="500" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="rgba(255,255,255,0.25)"/>
-      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
-    </linearGradient>
-
-    <!-- Inner glow effect -->
-    <radialGradient id="innerGlow" cx="50%" cy="30%" r="60%" gradientUnits="objectBoundingBox">
-      <stop offset="0%" stop-color="rgba(255,255,255,0.15)"/>
-      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
-    </radialGradient>
   </defs>
-
-  <!-- Modern shield shape - refined curves -->
-  <path id="shield" d="M512 120
-           C512 120 280 120 280 320
-           L280 480
-           C280 680 512 880 512 880
-           C512 880 744 680 744 480
-           L744 320
-           C744 120 512 120 512 120
-           Z"
-        fill="url(#shieldGradient)"/>
-
-  <!-- Highlight overlay for Apple-style depth -->
-  <path d="M512 120
-           C512 120 280 120 280 320
-           L280 480
-           C280 680 512 880 512 880
-           C512 880 744 680 744 480
-           L744 320
-           C744 120 512 120 512 120
-           Z"
-        fill="url(#highlightGradient)"/>
-
-  <!-- Subtle inner glow -->
-  <path d="M512 120
-           C512 120 280 120 280 320
-           L280 480
-           C280 680 512 880 512 880
-           C512 880 744 680 744 480
-           L744 320
-           C744 120 512 120 512 120
-           Z"
-        fill="url(#innerGlow)"/>
+  <path
+    d="M512 160
+       C400 160 310 195 270 240
+       C240 274 230 310 230 360
+       L230 500
+       C230 600 270 690 340 760
+       C390 810 450 850 512 890
+       C574 850 634 810 684 760
+       C754 690 794 600 794 500
+       L794 360
+       C794 310 784 274 754 240
+       C714 195 624 160 512 160Z"
+    fill="none"
+    stroke="url(#shieldStrokeGradient)"
+    stroke-width="48"
+    stroke-linejoin="round"
+  />
 </svg>
