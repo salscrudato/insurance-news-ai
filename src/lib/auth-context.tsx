@@ -27,7 +27,9 @@ import {
   signOut as firebaseSignOut,
   GoogleAuthProvider,
   PhoneAuthProvider,
+  OAuthProvider,
   RecaptchaVerifier,
+  linkWithCredential,
   type User,
   type ConfirmationResult,
 } from "firebase/auth"
@@ -57,6 +59,7 @@ interface AuthContextValue {
   isAnonymous: boolean
   isLocalGuest: boolean // New: true when using local guest mode (no Firebase)
   signInWithGoogle: () => Promise<void>
+  signInWithApple: () => Promise<void>
   signInWithPhone: (phoneNumber: string) => Promise<PhoneAuthResult>
   continueAsGuest: () => Promise<void>
   signOut: () => Promise<void>
@@ -69,6 +72,7 @@ const AuthContext = createContext<AuthContextValue>({
   isAnonymous: false,
   isLocalGuest: false,
   signInWithGoogle: async () => {},
+  signInWithApple: async () => {},
   signInWithPhone: async () => { throw new Error("Not initialized") },
   continueAsGuest: async () => {},
   signOut: async () => {},
@@ -247,6 +251,101 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } else {
       // Use popup for web
       await signInWithPopup(auth, googleProvider)
+    }
+  }, [])
+
+  // Sign in with Apple
+  // Uses native Firebase Authentication plugin on iOS, Firebase web SDK on web
+  // If the current user is anonymous, attempts to link Apple credential to preserve data
+  const signInWithApple = useCallback(async () => {
+    const isNative = Capacitor.isNativePlatform()
+    console.log("[AuthContext] signInWithApple: isNative =", isNative)
+
+    if (isNative) {
+      // Use native Firebase Authentication plugin for iOS
+      // This triggers the native ASAuthorizationController flow
+      console.log("[AuthContext] Native: calling signInWithApple...")
+      try {
+        const currentUser = auth.currentUser
+
+        // If user is anonymous, try to link Apple credential to preserve their data
+        if (currentUser && currentUser.isAnonymous) {
+          console.log("[AuthContext] Native: anonymous user detected, attempting link...")
+          try {
+            const result = await FirebaseAuthentication.signInWithApple()
+            if (!result.credential?.idToken) {
+              throw new Error("Apple sign-in returned no ID token")
+            }
+
+            // Build OAuthCredential for linking
+            const oauthCredential = new OAuthProvider("apple.com").credential({
+              idToken: result.credential.idToken,
+              rawNonce: result.credential.nonce ?? undefined,
+            })
+
+            // Attempt to link credentials
+            await linkWithCredential(currentUser, oauthCredential)
+            console.log("[AuthContext] Native: linked Apple credential to anonymous user")
+
+            // Update display name if provided by Apple
+            if (result.user?.displayName) {
+              await currentUser.reload()
+            }
+            return
+          } catch (linkError: unknown) {
+            const firebaseError = linkError as { code?: string }
+            console.warn("[AuthContext] Native: link failed, signing in directly:", firebaseError)
+            // If linking fails (credential-already-in-use), fall through to direct sign-in
+            if (firebaseError.code !== "auth/credential-already-in-use") {
+              throw linkError
+            }
+          }
+        }
+
+        // Direct sign-in (no anonymous user, or linking failed)
+        const result = await FirebaseAuthentication.signInWithApple()
+        console.log("[AuthContext] Native: signInWithApple result:", result)
+
+        if (!result.user) {
+          throw new Error("Apple sign-in failed - no user returned")
+        }
+      } catch (error) {
+        console.error("[AuthContext] Native: signInWithApple error:", error)
+        throw error
+      }
+    } else {
+      // Web flow using Firebase OAuthProvider popup
+      const appleProvider = new OAuthProvider("apple.com")
+      appleProvider.addScope("email")
+      appleProvider.addScope("name")
+
+      const currentUser = auth.currentUser
+
+      // If user is anonymous, try to link
+      if (currentUser && currentUser.isAnonymous) {
+        console.log("[AuthContext] Web: anonymous user detected, attempting link...")
+        try {
+          const result = await signInWithPopup(auth, appleProvider)
+          if (result.user) {
+            // Build credential and link
+            const credential = OAuthProvider.credentialFromResult(result)
+            if (credential) {
+              await linkWithCredential(currentUser, credential)
+              console.log("[AuthContext] Web: linked Apple credential to anonymous user")
+              return
+            }
+          }
+        } catch (linkError: unknown) {
+          const firebaseError = linkError as { code?: string }
+          console.warn("[AuthContext] Web: link failed, signing in directly:", firebaseError)
+          if (firebaseError.code !== "auth/credential-already-in-use") {
+            throw linkError
+          }
+        }
+      }
+
+      // Direct sign-in
+      await signInWithPopup(auth, appleProvider)
     }
   }, [])
 
@@ -454,6 +553,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAnonymous: user?.isAnonymous ?? false,
         isLocalGuest,
         signInWithGoogle,
+        signInWithApple,
         signInWithPhone,
         continueAsGuest,
         signOut,

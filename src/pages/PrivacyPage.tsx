@@ -89,8 +89,13 @@ export function PrivacyPage() {
           <Section title="2. What We Collect">
             <p>
               <strong className="text-[var(--color-text-primary)]">Account identifiers.</strong>{" "}
-              When you use the App, Firebase Authentication creates an anonymous user ID. If you sign in with email, we also store your email address.
+              When you use the App, Firebase Authentication creates an anonymous user ID. If you sign in with Apple, Google, or Phone, we store the minimal identity data provided by that service:
             </p>
+            <ul className="list-disc pl-[20px] space-y-[4px] mt-[4px]">
+              <li><strong className="text-[var(--color-text-primary)]">Apple Sign-In:</strong> Your name and email address. Apple may provide a private relay email address if you choose "Hide My Email," and we respect that choice. We do not receive your Apple ID password.</li>
+              <li><strong className="text-[var(--color-text-primary)]">Google Sign-In:</strong> Your name and email address from your Google account.</li>
+              <li><strong className="text-[var(--color-text-primary)]">Phone Sign-In:</strong> Your phone number for verification only.</li>
+            </ul>
             <p>
               <strong className="text-[var(--color-text-primary)]">Preferences &amp; bookmarks.</strong>{" "}
               Your notification settings, source preferences, and saved articles are stored in Cloud Firestore and linked to your account.
@@ -101,7 +106,7 @@ export function PrivacyPage() {
             </p>
             <p>
               <strong className="text-[var(--color-text-primary)]">Ask AI conversations.</strong>{" "}
-              Questions you submit to the Ask AI feature and the generated responses are stored in Firestore. Your questions are sent to OpenAI's API to generate answers.
+              Questions you submit to the Ask AI feature and the generated responses are stored in Firestore. Your questions and selected article context are sent to OpenAI's API to generate answers.
             </p>
             <p>
               <strong className="text-[var(--color-text-primary)]">Basic usage data.</strong>{" "}
@@ -111,19 +116,20 @@ export function PrivacyPage() {
 
           <Section title="3. What We Do Not Collect">
             <p>
-              We do not collect sensitive health information, financial account details, precise location data, contacts, or any data from other apps on your device.
+              We do not collect sensitive health information, financial account details, precise location data, contacts, or any data from other apps on your device. We do not track you across other companies' apps or websites for advertising. We do not sell, share, or use your data for advertising profiling.
             </p>
           </Section>
 
           <Section title="4. How We Use Your Data">
             <ul className="list-disc pl-[20px] space-y-[4px]">
               <li>Provide and operate the App's features (briefs, feed, bookmarks, AI chat)</li>
+              <li>Authenticate your identity and sync data across devices</li>
               <li>Deliver push notifications you've opted into</li>
               <li>Improve App performance and fix issues</li>
               <li>Comply with legal obligations</li>
             </ul>
             <p className="mt-[6px]">
-              We do not sell your personal information.
+              We do not sell your personal information. We do not use your data for advertising or cross-app tracking.
             </p>
           </Section>
 
@@ -134,7 +140,10 @@ export function PrivacyPage() {
                 <strong className="text-[var(--color-text-primary)]">Firebase (Google)</strong> — Authentication, Cloud Firestore database, Cloud Functions, and Firebase Cloud Messaging for push notifications.
               </li>
               <li>
-                <strong className="text-[var(--color-text-primary)]">OpenAI</strong> — Article summarization and the Ask AI conversational feature. Article text and your questions may be processed by OpenAI's systems.
+                <strong className="text-[var(--color-text-primary)]">Apple Sign-In</strong> — If you choose to sign in with Apple, authentication is handled by Apple's Sign in with Apple service. We receive only your name and email address (which may be a private relay address).
+              </li>
+              <li>
+                <strong className="text-[var(--color-text-primary)]">OpenAI</strong> — Article summarization and the Ask AI conversational feature. Article text and your questions may be processed by OpenAI's systems to generate answers.
               </li>
               <li>
                 <strong className="text-[var(--color-text-primary)]">Apple App Store</strong> — Distribution and app-level analytics.
@@ -144,12 +153,15 @@ export function PrivacyPage() {
 
           <Section title="6. Data Retention">
             <p>
-              Your account data (preferences, bookmarks, chat threads) is retained as long as your account exists. Signing out of a guest account permanently deletes associated data. Aggregated analytics may be retained for up to 26 months. You may request data deletion at any time by contacting us.
+              Your account data (preferences, bookmarks, chat threads) is retained as long as your account exists. When you delete your account (see section 7), all associated data is permanently and immediately removed from our systems. Aggregated, anonymized analytics may be retained for up to 26 months.
             </p>
           </Section>
 
           <Section title="7. Your Controls">
             <ul className="list-disc pl-[20px] space-y-[4px]">
+              <li>
+                <strong className="text-[var(--color-text-primary)]">Delete Account:</strong> You can permanently delete your account and all associated data directly in the App by going to <strong className="text-[var(--color-text-primary)]">Settings → Delete Account</strong>. This removes your authentication credentials, preferences, bookmarks, chat history, push tokens, and all other stored data. This action is immediate and irreversible.
+              </li>
               <li>
                 <strong className="text-[var(--color-text-primary)]">Notifications:</strong> Disable daily brief notifications in Settings at any time.
               </li>
@@ -160,7 +172,7 @@ export function PrivacyPage() {
                 <strong className="text-[var(--color-text-primary)]">Chat history:</strong> Delete Ask AI conversation threads from within the App.
               </li>
               <li>
-                <strong className="text-[var(--color-text-primary)]">Account:</strong> Sign out to delete all guest data, or contact us for a full data removal request.
+                <strong className="text-[var(--color-text-primary)]">Sign out:</strong> Sign out at any time from Settings. Guest data is cleared on sign-out.
               </li>
             </ul>
           </Section>

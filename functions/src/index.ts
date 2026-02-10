@@ -1576,3 +1576,167 @@ export const answerQuestionRagStream = onRequest(
     }
   }
 );
+
+// ============================================================================
+// Account Deletion (App Store Guideline 5.1.1(v))
+// ============================================================================
+
+/**
+ * Delete the authenticated user's account and all associated data.
+ *
+ * This callable function:
+ * 1. Requires authentication
+ * 2. Deletes all user-owned Firestore data:
+ *    - users/{uid}/prefs/*
+ *    - users/{uid}/bookmarks/*
+ *    - users/{uid}/pushTokens/*
+ *    - users/{uid}/chatThreads/* and subcollection messages
+ *    - users/{uid}/rateLimits/*
+ *    - users/{uid} document itself
+ * 3. Deletes the user from Firebase Auth
+ *
+ * Deletion is idempotent — safe to retry on partial failure.
+ */
+export const deleteAccount = onCall(
+  {
+    memory: "256MiB",
+    timeoutSeconds: 60,
+  },
+  async (request) => {
+    // Require authentication
+    if (!request.auth) {
+      throw new HttpsError(
+        "unauthenticated",
+        "You must be logged in to delete your account."
+      );
+    }
+
+    const uid = request.auth.uid;
+    console.log(`[deleteAccount] Starting account deletion for uid: ${uid}`);
+
+    const deletionResults: Record<string, { deleted: number; errors: number }> = {};
+
+    /**
+     * Helper: delete all documents in a collection (with optional subcollections)
+     */
+    async function deleteCollection(
+      collectionPath: string,
+      subcollections?: string[]
+    ): Promise<{ deleted: number; errors: number }> {
+      let deleted = 0;
+      let errors = 0;
+
+      const snapshot = await db.collection(collectionPath).get();
+
+      for (const doc of snapshot.docs) {
+        try {
+          // Delete subcollections first
+          if (subcollections) {
+            for (const sub of subcollections) {
+              const subPath = `${collectionPath}/${doc.id}/${sub}`;
+              const subResult = await deleteCollection(subPath);
+              deleted += subResult.deleted;
+              errors += subResult.errors;
+            }
+          }
+          await doc.ref.delete();
+          deleted++;
+        } catch (error) {
+          errors++;
+          console.error(`[deleteAccount] Error deleting ${collectionPath}/${doc.id}:`, error);
+        }
+      }
+
+      return { deleted, errors };
+    }
+
+    try {
+      // 1. Delete user preferences
+      const prefsResult = await deleteCollection(`users/${uid}/prefs`);
+      deletionResults["prefs"] = prefsResult;
+
+      // 2. Delete bookmarks
+      const bookmarksResult = await deleteCollection(`users/${uid}/bookmarks`);
+      deletionResults["bookmarks"] = bookmarksResult;
+
+      // 3. Delete push tokens
+      const pushTokensResult = await deleteCollection(`users/${uid}/pushTokens`);
+      deletionResults["pushTokens"] = pushTokensResult;
+
+      // 4. Delete chat threads (and their messages subcollection)
+      const chatThreadsResult = await deleteCollection(
+        `users/${uid}/chatThreads`,
+        ["messages"]
+      );
+      deletionResults["chatThreads"] = chatThreadsResult;
+
+      // 5. Delete rate limits
+      const rateLimitsResult = await deleteCollection(`users/${uid}/rateLimits`);
+      deletionResults["rateLimits"] = rateLimitsResult;
+
+      // 6. Delete user profile document
+      try {
+        const userDocRef = db.collection("users").doc(uid);
+        const userDoc = await userDocRef.get();
+        if (userDoc.exists) {
+          await userDocRef.delete();
+          deletionResults["userProfile"] = { deleted: 1, errors: 0 };
+        } else {
+          deletionResults["userProfile"] = { deleted: 0, errors: 0 };
+        }
+      } catch (error) {
+        deletionResults["userProfile"] = { deleted: 0, errors: 1 };
+        console.error("[deleteAccount] Error deleting user profile:", error);
+      }
+
+      // 7. Delete user from Firebase Auth
+      try {
+        await getAuth().deleteUser(uid);
+        deletionResults["authUser"] = { deleted: 1, errors: 0 };
+      } catch (error) {
+        // User may already be deleted from Auth
+        const authError = error as { code?: string };
+        if (authError.code === "auth/user-not-found") {
+          deletionResults["authUser"] = { deleted: 0, errors: 0 };
+          console.log(`[deleteAccount] Auth user already deleted: ${uid}`);
+        } else {
+          deletionResults["authUser"] = { deleted: 0, errors: 1 };
+          console.error("[deleteAccount] Error deleting Auth user:", error);
+          throw new HttpsError(
+            "internal",
+            "Failed to delete authentication account. Please try again."
+          );
+        }
+      }
+
+      // Summarize results
+      const totalDeleted = Object.values(deletionResults).reduce((sum, r) => sum + r.deleted, 0);
+      const totalErrors = Object.values(deletionResults).reduce((sum, r) => sum + r.errors, 0);
+
+      console.log(`[deleteAccount] ✓ Completed for ${uid}:`, {
+        totalDeleted,
+        totalErrors,
+        details: deletionResults,
+      });
+
+      return {
+        success: true,
+        uid,
+        totalDeleted,
+        totalErrors,
+        details: deletionResults,
+      };
+    } catch (error) {
+      // If it's already an HttpsError, re-throw
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+
+      console.error(`[deleteAccount] ✗ Unexpected error for ${uid}:`, error);
+      throw new HttpsError(
+        "internal",
+        "Account deletion failed. Please try again or contact support."
+      );
+    }
+  }
+);

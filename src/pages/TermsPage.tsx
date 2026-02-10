@@ -102,7 +102,13 @@ export function TermsPage() {
 
           <Section title="4. User Accounts">
             <p>
-              The App supports anonymous authentication and optional email sign-in via Firebase. Your preferences, bookmarks, and chat history are associated with your account. Signing out of a guest account will permanently delete your data.
+              The App supports anonymous (guest) authentication and optional sign-in via Apple, Google, or Phone number. Your preferences, bookmarks, and chat history are associated with your account.
+            </p>
+            <p>
+              You may delete your account at any time from <strong className="text-[var(--color-text-primary)]">Settings → Delete Account</strong>. Deleting your account permanently removes all associated data including preferences, bookmarks, chat history, and push notification tokens. This action is immediate and cannot be undone.
+            </p>
+            <p>
+              Signing out of a guest account will clear associated data.
             </p>
           </Section>
 

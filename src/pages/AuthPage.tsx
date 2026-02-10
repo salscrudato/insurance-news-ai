@@ -137,9 +137,9 @@ function OTPInput({
 // ---------------------------------------------------------------------------
 export function AuthPage() {
   const navigate = useNavigate()
-  const { signInWithGoogle, signInWithPhone, continueAsGuest } = useAuth()
+  const { signInWithGoogle, signInWithApple, signInWithPhone, continueAsGuest } = useAuth()
 
-  const [isLoading, setIsLoading] = useState<"google" | "phone" | "guest" | null>(null)
+  const [isLoading, setIsLoading] = useState<"apple" | "google" | "phone" | "guest" | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   // Phone auth state
@@ -183,6 +183,27 @@ export function AuthPage() {
 
   // Refs for auto-focus
   const phoneInputRef = useRef<HTMLInputElement>(null)
+
+  // ---------------------------------------------------------------------------
+  // Apple
+  // ---------------------------------------------------------------------------
+  const handleAppleSignIn = async () => {
+    setError(null)
+    setIsLoading("apple")
+    hapticLight()
+
+    try {
+      await signInWithApple()
+      hapticSuccess()
+      navigate("/", { replace: true })
+    } catch (err) {
+      console.error("Apple sign-in failed:", err)
+      setError("Apple sign-in failed. Please try again.")
+      hapticWarning()
+    } finally {
+      setIsLoading(null)
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Google
@@ -360,6 +381,22 @@ export function AuthPage() {
 
         {/* Sign-in buttons */}
         <div className="flex w-full max-w-[320px] flex-col gap-[10px]">
+          {/* Sign in with Apple — placed first per Apple HIG (equal or greater prominence) */}
+          <button
+            onClick={handleAppleSignIn}
+            disabled={isLoading !== null}
+            className="relative flex h-[50px] w-full items-center justify-center gap-[10px] rounded-[12px] bg-black text-[16px] font-semibold tracking-[-0.2px] text-white shadow-[var(--shadow-sm)] transition-all duration-[var(--duration-fast)] ease-[var(--ease-ios)] active:scale-[0.98] active:shadow-[var(--shadow-xs)] disabled:opacity-40"
+          >
+            {isLoading === "apple" ? (
+              <Loader2 className="h-[18px] w-[18px] animate-spin text-white/60" />
+            ) : (
+              <>
+                <AppleIcon />
+                <span>Continue with Apple</span>
+              </>
+            )}
+          </button>
+
           {/* Google Sign In */}
           <button
             onClick={handleGoogleSignIn}
@@ -583,6 +620,14 @@ export function AuthPage() {
 // ---------------------------------------------------------------------------
 // Icons
 // ---------------------------------------------------------------------------
+function AppleIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+    </svg>
+  )
+}
+
 function GoogleIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">

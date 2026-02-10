@@ -24,14 +24,17 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet"
-import { Bell, Tag, TextCursor, Info, FileText, Shield } from "lucide-react"
+import { Bell, Tag, TextCursor, Info, FileText, Shield, Trash2, Loader2 } from "lucide-react"
 import {
   useUserPreferences,
   useToggleNotifications,
   usePushNotifications,
 } from "@/lib/hooks"
 import { useAuth } from "@/lib/auth-context"
-import { hapticLight, hapticSuccess, hapticWarning } from "@/lib/haptics"
+import { hapticLight, hapticSuccess, hapticWarning, hapticError } from "@/lib/haptics"
+import { httpsCallable } from "firebase/functions"
+import { functions } from "@/lib/firebase"
+import { toast } from "sonner"
 
 // iOS system colors for icon chips
 const ICON_COLORS = {
@@ -41,11 +44,19 @@ const ICON_COLORS = {
   gray: undefined, // uses ListRowIcon default (fill-secondary)
 } as const
 
+// Callable to delete account and all associated data
+const deleteAccountCallable = httpsCallable<void, { success: boolean }>(
+  functions,
+  "deleteAccount"
+)
+
 export function SettingsPage() {
   const navigate = useNavigate()
-  const { signOut, isAnonymous } = useAuth()
+  const { signOut, isAnonymous, user } = useAuth()
   const [showSignOutSheet, setShowSignOutSheet] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
+  const [showDeleteSheet, setShowDeleteSheet] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const { data: prefs, isLoading: prefsLoading } = useUserPreferences()
   const toggleNotifications = useToggleNotifications()
@@ -90,6 +101,38 @@ export function SettingsPage() {
       setIsSigningOut(false)
     }
   }
+
+  // Delete Account
+  const handleDeleteAccountClick = () => {
+    hapticWarning()
+    setShowDeleteSheet(true)
+  }
+
+  const handleDeleteAccountConfirm = async () => {
+    setIsDeleting(true)
+    try {
+      await deleteAccountCallable()
+      hapticSuccess()
+      toast.success("Account deleted", {
+        description: "Your account and all associated data have been permanently removed.",
+      })
+      setShowDeleteSheet(false)
+      // Sign out locally to clear any cached state
+      await signOut()
+      navigate("/auth", { replace: true })
+    } catch (error) {
+      console.error("Account deletion failed:", error)
+      hapticError()
+      toast.error("Deletion failed", {
+        description: "Something went wrong. Please try again.",
+      })
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  // Only show delete account for authenticated (non-local-guest) users with a Firebase account
+  const showDeleteAccount = !!user
 
   return (
     <div className="space-y-[28px] pb-[20px]">
@@ -241,6 +284,32 @@ export function SettingsPage() {
       </section>
 
       {/* ============================================================ */}
+      {/* Delete Account                                                */}
+      {/* ============================================================ */}
+      {showDeleteAccount && (
+        <section className="space-y-[7px]">
+          <Card variant="grouped">
+            <ListRow
+              variant="compact"
+              interactive
+              onClick={handleDeleteAccountClick}
+              aria-label="Delete account"
+            >
+              <ListRowIcon color="#FF3B30">
+                <Trash2 strokeWidth={1.75} />
+              </ListRowIcon>
+              <ListRowContent>
+                <ListRowLabel className="text-[var(--color-destructive)]">Delete Account</ListRowLabel>
+              </ListRowContent>
+            </ListRow>
+          </Card>
+          <SectionFooter inset>
+            Permanently delete your account and all associated data including preferences, bookmarks, chat history, and push notification tokens.
+          </SectionFooter>
+        </section>
+      )}
+
+      {/* ============================================================ */}
       {/* Footer                                                        */}
       {/* ============================================================ */}
       <footer className="pt-[4px] pb-[8px] text-center">
@@ -288,6 +357,69 @@ export function SettingsPage() {
                 setShowSignOutSheet(false)
               }}
               disabled={isSigningOut}
+              className="w-full rounded-[var(--radius-xl)] bg-[var(--color-fill-tertiary)] py-[15px] text-[17px] font-semibold tracking-[-0.4px] text-[var(--color-text-primary)] transition-all duration-[var(--duration-fast)] ease-[var(--ease-ios)] active:scale-[0.98] active:bg-[var(--color-fill-secondary)] disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* ============================================================ */}
+      {/* Delete Account Confirmation Sheet                             */}
+      {/* ============================================================ */}
+      <Sheet open={showDeleteSheet} onOpenChange={setShowDeleteSheet}>
+        <SheetContent
+          side="bottom"
+          hideCloseButton
+          className="rounded-t-[var(--radius-3xl)] px-[20px] pb-[calc(20px+var(--safe-area-inset-bottom))] pt-[8px]"
+        >
+          {/* Drag indicator */}
+          <div className="drag-indicator mb-[20px]" />
+
+          <SheetTitle className="text-center text-[20px] font-bold leading-[1.2] tracking-[-0.36px] text-[var(--color-text-primary)]">
+            Delete Account?
+          </SheetTitle>
+          <SheetDescription className="mt-[8px] text-center text-[15px] leading-[1.45] tracking-[-0.2px] text-[var(--color-text-secondary)]">
+            This action is permanent and cannot be undone. The following will be deleted:
+          </SheetDescription>
+
+          <ul className="mt-[14px] space-y-[6px] px-[4px]">
+            {[
+              "Your account and login credentials",
+              "Notification preferences and push tokens",
+              "Saved bookmarks",
+              "Ask AI chat history",
+              "All other associated data",
+            ].map((item) => (
+              <li
+                key={item}
+                className="flex items-start gap-[8px] text-[14px] leading-[1.4] tracking-[-0.15px] text-[var(--color-text-secondary)]"
+              >
+                <span className="mt-[4px] h-[5px] w-[5px] shrink-0 rounded-full bg-[var(--color-text-quaternary)]" />
+                {item}
+              </li>
+            ))}
+          </ul>
+
+          <div className="mt-[24px] flex flex-col gap-[10px]">
+            <button
+              onClick={handleDeleteAccountConfirm}
+              disabled={isDeleting}
+              className="flex w-full items-center justify-center rounded-[var(--radius-xl)] bg-[var(--color-destructive)] py-[15px] text-[17px] font-semibold tracking-[-0.4px] text-white shadow-[var(--shadow-button)] transition-all duration-[var(--duration-fast)] ease-[var(--ease-ios)] active:scale-[0.98] active:bg-[#E0342B] disabled:opacity-50"
+            >
+              {isDeleting ? (
+                <Loader2 className="h-[20px] w-[20px] animate-spin" />
+              ) : (
+                "Delete Account"
+              )}
+            </button>
+            <button
+              onClick={() => {
+                hapticLight()
+                setShowDeleteSheet(false)
+              }}
+              disabled={isDeleting}
               className="w-full rounded-[var(--radius-xl)] bg-[var(--color-fill-tertiary)] py-[15px] text-[17px] font-semibold tracking-[-0.4px] text-[var(--color-text-primary)] transition-all duration-[var(--duration-fast)] ease-[var(--ease-ios)] active:scale-[0.98] active:bg-[var(--color-fill-secondary)] disabled:opacity-50"
             >
               Cancel
