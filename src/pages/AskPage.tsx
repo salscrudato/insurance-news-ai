@@ -45,7 +45,7 @@ async function ensureAuthToken(): Promise<string | null> {
 
   // No current user - try anonymous sign-in with timeout
   // (Firebase Auth SDK hangs in Capacitor WebView)
-  console.log("[ensureAuthToken] No current user, attempting anonymous sign-in...")
+  // No current user - try anonymous sign-in with timeout
 
   const timeoutPromise = new Promise<never>((_, reject) => {
     setTimeout(() => reject(new Error("timeout")), 3000)
@@ -56,10 +56,8 @@ async function ensureAuthToken(): Promise<string | null> {
       signInAnonymously(auth),
       timeoutPromise
     ])
-    console.log("[ensureAuthToken] Anonymous sign-in succeeded:", result.user.uid)
     return result.user.getIdToken()
   } catch {
-    console.warn("[ensureAuthToken] Anonymous sign-in failed or timed out, proceeding without auth")
     return null
   }
 }

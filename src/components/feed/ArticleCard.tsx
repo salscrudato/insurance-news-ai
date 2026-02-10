@@ -87,22 +87,27 @@ interface ArticleCardProps {
 
 function formatRelativeTime(timestamp: Timestamp | string | null): string {
   if (!timestamp) return ""
-  // Handle both Firestore Timestamp and ISO string
-  const date = typeof timestamp === "string" ? new Date(timestamp) : timestamp.toDate()
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / (1000 * 60))
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  try {
+    // Handle both Firestore Timestamp and ISO string
+    const date = typeof timestamp === "string" ? new Date(timestamp) : timestamp.toDate()
+    if (isNaN(date.getTime())) return ""
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / (1000 * 60))
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
-  if (diffMins < 60) {
-    return `${diffMins}m`
-  } else if (diffHours < 24) {
-    return `${diffHours}h`
-  } else if (diffDays < 7) {
-    return `${diffDays}d`
-  } else {
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    if (diffMins < 60) {
+      return `${diffMins}m`
+    } else if (diffHours < 24) {
+      return `${diffHours}h`
+    } else if (diffDays < 7) {
+      return `${diffDays}d`
+    } else {
+      return date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    }
+  } catch {
+    return ""
   }
 }
 

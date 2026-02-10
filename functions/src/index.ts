@@ -455,7 +455,7 @@ export const getOrCreateArticleAI = onCall<GetOrCreateArticleAIData>(
           whyItMatters: article.ai.whyItMatters,
           topics: article.ai.topics,
           category: article.ai.category,
-          generatedAt: article.ai.generatedAt.toDate().toISOString(),
+          generatedAt: article.ai.generatedAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
           model: article.ai.model,
         },
         remaining: rateLimit.remaining,
@@ -471,26 +471,32 @@ export const getOrCreateArticleAI = onCall<GetOrCreateArticleAIData>(
       title: article.title,
       snippet: article.snippet,
       sourceName: article.sourceName,
-      publishedAt: article.publishedAt.toDate().toISOString().split("T")[0],
+      publishedAt: article.publishedAt?.toDate?.()?.toISOString()?.split("T")[0] ?? "unknown",
       url: article.url,
     });
 
-    const response = await openai.responses.create({
-      model: AI_MODEL,
-      max_output_tokens: 800,
-      input: [
-        { role: "system", content: ARTICLE_SUMMARIZE_SYSTEM },
-        { role: "user", content: prompt },
-      ],
-      text: {
-        format: {
-          type: "json_schema",
-          name: "article_ai",
-          schema: ARTICLE_AI_SCHEMA,
-          strict: true,
+    let response;
+    try {
+      response = await openai.responses.create({
+        model: AI_MODEL,
+        max_output_tokens: 800,
+        input: [
+          { role: "system", content: ARTICLE_SUMMARIZE_SYSTEM },
+          { role: "user", content: prompt },
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "article_ai",
+            schema: ARTICLE_AI_SCHEMA,
+            strict: true,
+          },
         },
-      },
-    });
+      });
+    } catch (openaiError) {
+      console.error("[getOrCreateArticleAI] OpenAI API error:", openaiError instanceof Error ? openaiError.message : "Unknown error");
+      throw new HttpsError("internal", "AI service is temporarily unavailable. Please try again.");
+    }
 
     // Parse structured output
     const outputText = response.output_text;
@@ -935,7 +941,7 @@ export const getTodayBrief = onCall<GetTodayBriefData>(async (request) => {
         url: article.url,
         sourceName: article.sourceName,
         sourceId: article.sourceId,
-        publishedAt: article.publishedAt.toDate().toISOString(),
+        publishedAt: article.publishedAt?.toDate?.()?.toISOString() ?? null,
         snippet: article.snippet,
         imageUrl: article.imageUrl || null,
       },
@@ -947,7 +953,7 @@ export const getTodayBrief = onCall<GetTodayBriefData>(async (request) => {
     date: dateKey,
     brief: {
       ...brief,
-      createdAt: brief.createdAt.toDate().toISOString(),
+      createdAt: brief.createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
     },
     topStoriesWithArticles,
   };
@@ -999,7 +1005,10 @@ export const getArticles = onCall<GetArticlesData>(async (request) => {
 
   // Source filter (max 10 for Firestore 'in' query)
   if (sourceIds && sourceIds.length > 0 && sourceIds.length <= 10) {
-    query = query.where("sourceId", "in", sourceIds);
+    const validSourceIds = sourceIds.filter((id) => typeof id === "string" && id.trim() !== "");
+    if (validSourceIds.length > 0) {
+      query = query.where("sourceId", "in", validSourceIds);
+    }
   }
 
   // Pagination
@@ -1081,8 +1090,10 @@ export const backfillEmbeddingsLast30Days = onCall<BackfillEmbeddingsData>(
       throw new HttpsError("permission-denied", "Admin access required");
     }
 
-    const limitPerRun = request.data?.limitPerRun ?? 100;
-    const daysBack = request.data?.daysBack ?? 30;
+    const rawLimit = request.data?.limitPerRun ?? 100;
+    const rawDays = request.data?.daysBack ?? 30;
+    const limitPerRun = Math.min(Math.max(1, Number(rawLimit) || 100), 500);
+    const daysBack = Math.min(Math.max(1, Number(rawDays) || 30), 365);
 
     console.log("[backfillEmbeddings] Starting backfill", {
       limitPerRun,
@@ -1284,11 +1295,11 @@ export const answerQuestionRag = onCall<AnswerQuestionRagData>(
       uid = request.auth.uid;
     } else {
       // Use IP from rawRequest for guest rate limiting
-      const clientIp = request.rawRequest?.headers?.["x-forwarded-for"] ||
-                       request.rawRequest?.ip ||
-                       "unknown";
-      uid = `guest_${typeof clientIp === "string" ? clientIp : clientIp[0]}`;
-      console.log("[answerQuestionRag] Guest mode, using IP-based uid:", uid);
+      const rawIp = request.rawRequest?.headers?.["x-forwarded-for"] ||
+                    request.rawRequest?.ip ||
+                    "unknown";
+      const clientIp = Array.isArray(rawIp) ? rawIp[0] ?? "unknown" : rawIp.split(",")[0]?.trim() ?? "unknown";
+      uid = `guest_${clientIp}`;
     }
 
     const { question, scope, category, sourceIds, history } = request.data;
@@ -1349,7 +1360,8 @@ export const answerQuestionRag = onCall<AnswerQuestionRagData>(
         sourceIds: sourceIds || null,
       };
 
-      // Sanitize history
+      // Sanitize history — truncate individual messages to prevent token abuse
+      const MAX_HISTORY_MSG_LENGTH = 4000;
       const chatHistory: ChatMessage[] = (history || [])
         .slice(-8)
         .filter(
@@ -1358,7 +1370,13 @@ export const answerQuestionRag = onCall<AnswerQuestionRagData>(
             typeof msg.role === "string" &&
             (msg.role === "user" || msg.role === "assistant") &&
             typeof msg.content === "string"
-        );
+        )
+        .map((msg) => ({
+          ...msg,
+          content: msg.content.length > MAX_HISTORY_MSG_LENGTH
+            ? msg.content.slice(0, MAX_HISTORY_MSG_LENGTH)
+            : msg.content,
+        }));
 
       // Generate answer with userId for caching
       const answer = await answerQuestion(question, ragScope, chatHistory, uid);
@@ -1451,9 +1469,9 @@ export const answerQuestionRagStream = onRequest(
     } else {
       // No auth token - use IP-based guest ID for rate limiting
       // This allows Capacitor WebView guests to use the API
-      const clientIp = req.headers["x-forwarded-for"] || req.ip || "unknown";
-      uid = `guest_${typeof clientIp === "string" ? clientIp : clientIp[0]}`;
-      console.log("[answerQuestionRagStream] Guest mode, using IP-based uid:", uid);
+      const rawIp = req.headers["x-forwarded-for"] || req.ip || "unknown";
+      const clientIp = Array.isArray(rawIp) ? rawIp[0] ?? "unknown" : rawIp.split(",")[0]?.trim() ?? "unknown";
+      uid = `guest_${clientIp}`;
     }
 
     // Parse request body
@@ -1506,7 +1524,8 @@ export const answerQuestionRagStream = onRequest(
         sourceIds: sourceIds || null,
       };
 
-      // Sanitize history
+      // Sanitize history — truncate individual messages to prevent token abuse
+      const MAX_STREAM_HISTORY_MSG_LENGTH = 4000;
       const chatHistory: ChatMessage[] = (history || [])
         .slice(-8)
         .filter(
@@ -1518,7 +1537,13 @@ export const answerQuestionRagStream = onRequest(
             typeof (msg as ChatMessage).role === "string" &&
             ((msg as ChatMessage).role === "user" || (msg as ChatMessage).role === "assistant") &&
             typeof (msg as ChatMessage).content === "string"
-        );
+        )
+        .map((msg: ChatMessage) => ({
+          ...msg,
+          content: msg.content.length > MAX_STREAM_HISTORY_MSG_LENGTH
+            ? msg.content.slice(0, MAX_STREAM_HISTORY_MSG_LENGTH)
+            : msg.content,
+        }));
 
       // Perform retrieval (uses hardened pipeline with input sanitization, lexical+semantic ranking)
       const retrieval = await performRetrieval(question, ragScope, chatHistory);

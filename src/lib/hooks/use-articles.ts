@@ -73,8 +73,6 @@ async function fetchArticlesHttp(params: {
   limit?: number
   startAfterPublishedAt?: string
 }): Promise<GetArticlesResponse> {
-  console.log("[useArticles] Fetching via HTTP...", params)
-
   const response = await fetch(`${FUNCTIONS_BASE_URL}/getArticles`, {
     method: "POST",
     headers: {
@@ -91,14 +89,10 @@ async function fetchArticlesHttp(params: {
   // Firebase callable functions wrap response in { result: ... }
   const result = json.result || json
 
-  console.log("[useArticles] HTTP fetch succeeded, got", result.articles?.length, "articles")
-
   return result
 }
 
 async function fetchArticles({ filters, pageParam }: FetchArticlesParams): Promise<FetchArticlesResult> {
-  console.log("[useArticles] fetchArticles starting...", { filters, hasPageParam: !!pageParam })
-
   const result = await fetchArticlesHttp({
     category: filters.category,
     timeWindow: filters.timeWindow,

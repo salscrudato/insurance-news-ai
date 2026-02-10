@@ -97,6 +97,7 @@ service cloud.firestore {
         allow create: if isOwner(uid)
           && request.resource.data.token is string
           && request.resource.data.platform is string
+          && request.resource.data.platform in ["ios", "web", "android"]
           && request.resource.data.createdAt is timestamp
           && request.resource.data.updatedAt is timestamp;
         allow update: if isOwner(uid)
@@ -112,6 +113,7 @@ service cloud.firestore {
         allow read: if isOwner(uid);
         allow create: if isOwner(uid)
           && request.resource.data.title is string
+          && request.resource.data.title.size() <= 500
           && request.resource.data.createdAt is timestamp
           && request.resource.data.updatedAt is timestamp
           && request.resource.data.scope in ["today", "7d", "30d"]
@@ -130,6 +132,7 @@ service cloud.firestore {
           allow create: if isOwner(uid)
             && request.resource.data.role in ["user", "assistant"]
             && request.resource.data.content is string
+            && request.resource.data.content.size() <= 50000
             && request.resource.data.createdAt is timestamp;
           allow update: if false; // Messages are immutable
           allow delete: if isOwner(uid);

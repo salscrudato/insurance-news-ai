@@ -56,7 +56,6 @@ export async function registerPushToken(uid: string): Promise<string | null> {
   try {
     const permission = await requestPushPermission()
     if (permission !== "granted") {
-      console.log("[Push] Permission not granted")
       return null
     }
 
@@ -65,8 +64,7 @@ export async function registerPushToken(uid: string): Promise<string | null> {
     } else {
       return await registerWebPush(uid)
     }
-  } catch (error) {
-    console.error("[Push] Failed to register:", error)
+  } catch {
     return null
   }
 }
@@ -76,23 +74,38 @@ export async function registerPushToken(uid: string): Promise<string | null> {
  */
 async function registerNativePush(uid: string): Promise<string | null> {
   return new Promise((resolve) => {
+    let resolved = false
+    const safeResolve = (value: string | null) => {
+      if (!resolved) {
+        resolved = true
+        resolve(value)
+      }
+    }
+
     // Listen for registration success
     PushNotifications.addListener("registration", async (token: Token) => {
-      console.log("[Push] iOS token received:", token.value)
-      await storePushToken(uid, token.value, "ios")
-      resolve(token.value)
+      try {
+        await storePushToken(uid, token.value, "ios")
+      } catch {
+        // Token storage failed but we still have the token
+      }
+      safeResolve(token.value)
     })
 
     // Listen for registration errors
-    PushNotifications.addListener("registrationError", (error) => {
-      console.error("[Push] iOS registration error:", error)
-      resolve(null)
+    PushNotifications.addListener("registrationError", () => {
+      safeResolve(null)
     })
 
     // Register with APNS
-    PushNotifications.register()
+    PushNotifications.register().catch(() => {
+      safeResolve(null)
+    })
   })
 }
+
+/** Track whether we've already set up the foreground message listener */
+let webMessageListenerRegistered = false
 
 /**
  * Register web push notifications via Firebase Messaging
@@ -100,7 +113,6 @@ async function registerNativePush(uid: string): Promise<string | null> {
 async function registerWebPush(uid: string): Promise<string | null> {
   // Skip web push if VAPID key is not configured
   if (!VAPID_KEY) {
-    console.log("[Push] Web push skipped - VAPID key not configured (set VITE_FIREBASE_VAPID_KEY)")
     return null
   }
 
@@ -109,26 +121,30 @@ async function registerWebPush(uid: string): Promise<string | null> {
     const token = await getToken(messaging, { vapidKey: VAPID_KEY })
 
     if (token) {
-      console.log("[Push] Web token received:", token.substring(0, 20) + "...")
       await storePushToken(uid, token, "web")
 
-      // Listen for foreground messages
-      onMessage(messaging, (payload) => {
-        console.log("[Push] Foreground message:", payload)
-        // Show notification manually for foreground
-        if (payload.notification) {
-          new Notification(payload.notification.title || "The Brief", {
-            body: payload.notification.body,
-            icon: "/pwa-192x192.png",
-          })
-        }
-      })
+      // Listen for foreground messages (only register once to prevent memory leak)
+      if (!webMessageListenerRegistered) {
+        webMessageListenerRegistered = true
+        onMessage(messaging, (payload) => {
+          // Show notification manually for foreground
+          if (payload.notification) {
+            try {
+              new Notification(payload.notification.title || "The Brief", {
+                body: payload.notification.body,
+                icon: "/pwa-192x192.png",
+              })
+            } catch {
+              // Notification API may throw if permission was revoked
+            }
+          }
+        })
+      }
 
       return token
     }
     return null
-  } catch (error) {
-    console.error("[Push] Web registration error:", error)
+  } catch {
     return null
   }
 }
@@ -148,7 +164,6 @@ async function storePushToken(
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   })
-  console.log(`[Push] Token stored for ${platform}`)
 }
 
 /**
@@ -157,7 +172,6 @@ async function storePushToken(
 export async function removePushToken(uid: string, token: string): Promise<void> {
   const tokenRef = doc(db, "users", uid, "pushTokens", token)
   await deleteDoc(tokenRef)
-  console.log("[Push] Token removed")
 }
 
 /**

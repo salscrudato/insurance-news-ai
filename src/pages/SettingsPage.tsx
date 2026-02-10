@@ -134,7 +134,7 @@ export function SettingsPage() {
 
       // Fire-and-forget signOut to clean up local state; don't await it
       signOut().catch(() => {
-        console.log("[DeleteAccount] signOut after deletion failed (expected)")
+        // Expected: signOut may fail after server-side account deletion
       })
 
       navigate("/auth", { replace: true })

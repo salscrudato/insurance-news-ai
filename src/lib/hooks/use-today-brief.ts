@@ -80,8 +80,6 @@ async function fetchTodayBriefHttp(date?: string): Promise<TodayBriefResponse> {
  * Updates localStorage cache on success
  */
 async function fetchTodayBrief(date?: string): Promise<TodayBriefResponse> {
-  console.log("[useTodayBrief] fetchTodayBrief starting...", { date })
-
   // Create timeout promise (10 seconds)
   const timeoutPromise = new Promise<never>((_, reject) => {
     setTimeout(() => reject(new Error("Request timed out")), 10000)
@@ -89,12 +87,10 @@ async function fetchTodayBrief(date?: string): Promise<TodayBriefResponse> {
 
   try {
     // Try direct HTTP fetch first (works better in Capacitor)
-    console.log("[useTodayBrief] Trying HTTP fetch...")
     const data = await Promise.race([
       fetchTodayBriefHttp(date),
       timeoutPromise
     ])
-    console.log("[useTodayBrief] fetchTodayBrief succeeded", data?.found)
 
     // Cache the response (only for "today" queries)
     if (!date && data.found) {
@@ -102,27 +98,19 @@ async function fetchTodayBrief(date?: string): Promise<TodayBriefResponse> {
     }
 
     return data
-  } catch (httpError) {
-    console.warn("[useTodayBrief] HTTP fetch failed, trying callable...", httpError)
+  } catch {
+    // Fallback to callable (for web/emulator)
+    const result = await Promise.race([
+      getTodayBriefCallable({ date }),
+      timeoutPromise
+    ])
+    const data = result.data
 
-    try {
-      // Fallback to callable (for web/emulator)
-      const result = await Promise.race([
-        getTodayBriefCallable({ date }),
-        timeoutPromise
-      ])
-      console.log("[useTodayBrief] Callable succeeded", result.data?.found)
-      const data = result.data
-
-      if (!date && data.found) {
-        setCache(BRIEF_CACHE_KEY, data, BRIEF_CACHE_TTL)
-      }
-
-      return data
-    } catch (callableError) {
-      console.error("[useTodayBrief] Both methods failed", callableError)
-      throw callableError
+    if (!date && data.found) {
+      setCache(BRIEF_CACHE_KEY, data, BRIEF_CACHE_TTL)
     }
+
+    return data
   }
 }
 

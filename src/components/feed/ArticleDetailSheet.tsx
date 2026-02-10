@@ -148,8 +148,7 @@ export function ArticleDetailSheet({
           toast.success("AI analysis generated")
         }
       },
-      onError: (error) => {
-        console.error("Failed to generate AI:", error)
+      onError: () => {
         setAiError(true)
         toast.error("Failed to generate analysis", {
           description: "Please try again later",

@@ -3,27 +3,33 @@
  * Executive-grade design with consistent sizing and elegant fallbacks
  */
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import type { TopStoryWithArticle } from "@/lib/hooks/use-today-brief"
 
 /** Accept Firestore Timestamp, ISO string, or ms number. */
-function formatRelativeTime(timestamp: { toDate(): Date } | string | number | Date): string {
-  const date =
-    typeof timestamp === "string" || typeof timestamp === "number"
-      ? new Date(timestamp)
-      : timestamp instanceof Date
-        ? timestamp
-        : timestamp.toDate()
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / (1000 * 60))
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+function formatRelativeTime(timestamp: { toDate(): Date } | string | number | Date | null | undefined): string {
+  if (!timestamp) return ""
+  try {
+    const date =
+      typeof timestamp === "string" || typeof timestamp === "number"
+        ? new Date(timestamp)
+        : timestamp instanceof Date
+          ? timestamp
+          : timestamp.toDate()
+    if (isNaN(date.getTime())) return ""
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / (1000 * 60))
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
-  if (diffMins < 60) return `${diffMins}m`
-  if (diffHours < 24) return `${diffHours}h`
-  if (diffDays < 7) return `${diffDays}d`
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    if (diffMins < 60) return `${diffMins}m`
+    if (diffHours < 24) return `${diffHours}h`
+    if (diffDays < 7) return `${diffDays}d`
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+  } catch {
+    return ""
+  }
 }
 
 /**
@@ -75,6 +81,13 @@ interface TopStoryCardProps {
 
 function TopStoryCard({ story, index, onSelect }: TopStoryCardProps) {
   const [imgError, setImgError] = useState(false)
+  const prevImageUrlRef = useRef(story.article?.imageUrl)
+
+  // Reset error state when imageUrl changes (without useEffect)
+  if (story.article?.imageUrl !== prevImageUrlRef.current) {
+    prevImageUrlRef.current = story.article?.imageUrl
+    if (imgError) setImgError(false)
+  }
 
   // Defensive: skip rendering if article is null (deleted from Firestore)
   if (!story.article) return null

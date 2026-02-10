@@ -23,12 +23,17 @@ import {
 import { EmptyState, ErrorState, SectionLabel, Card } from "@/components/ui"
 
 function formatDate(dateString: string): string {
-  const date = new Date(dateString + "T12:00:00")
-  return date.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  })
+  try {
+    const date = new Date(dateString + "T12:00:00")
+    if (isNaN(date.getTime())) return dateString
+    return date.toLocaleDateString("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+    })
+  } catch {
+    return dateString
+  }
 }
 
 function formatUpdateTime(createdAt: { toDate?: () => Date } | null): string {
@@ -223,10 +228,10 @@ export function TodayPage() {
           <div className="h-[0.5px] bg-[var(--color-separator)] mb-[14px]" />
           <div className="py-[4px]">
             <p className="text-[13px] font-medium tracking-[-0.08px] text-[var(--color-text-secondary)]">
-              Compiled from {brief.sourcesUsed.length} sources
+              Compiled from {brief.sourcesUsed?.length ?? 0} sources
             </p>
             <p className="mt-[2px] truncate text-[12px] tracking-[-0.04px] text-[var(--color-text-tertiary)]">
-              {brief.sourcesUsed.map((s) => s.name).join(" \u00b7 ")}
+              {brief.sourcesUsed?.map((s) => s.name).join(" \u00b7 ") ?? ""}
             </p>
           </div>
         </footer>
