@@ -1,52 +1,120 @@
 @import "tailwindcss";
 
-/* ===== Apple-Inspired Design Tokens ===== */
+/* ===== Apple-Inspired Design Tokens (2026) ===== */
 :root {
-  /* Typography - SF Pro-like system font stack */
+  /* Typography - SF Pro-like system font stack with optimized rendering */
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
     "Helvetica Neue", "Segoe UI", Roboto, system-ui, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display",
+    "Helvetica Neue", "Segoe UI", Roboto, system-ui, sans-serif;
 
-  /* Colors - Light mode only */
+  /* Colors - Light mode (iOS 18+ / visionOS 2026 refined palette) */
   --color-background: #FFFFFF;
-  --color-surface: #F5F5F7;
+  --color-bg-grouped: #F2F2F7;
+  --color-bg-grouped-secondary: #EFEFF4;
+  --color-bg-subtle: #FAFAFA;
+  --color-surface: #FFFFFF;
   --color-surface-elevated: #FFFFFF;
-  --color-border: rgba(0, 0, 0, 0.08);
-  --color-border-strong: rgba(0, 0, 0, 0.12);
+  --color-surface-secondary: #F9F9FB;
+  --color-surface-tertiary: #F5F5F7;
+  --color-border: rgba(0, 0, 0, 0.04);
+  --color-border-strong: rgba(0, 0, 0, 0.06);
+  --color-separator: rgba(60, 60, 67, 0.08);
+  --color-separator-opaque: #E5E5EA;
   --color-text-primary: #1D1D1F;
-  --color-text-secondary: #6E6E73;
-  --color-text-tertiary: #86868B;
+  --color-text-secondary: rgba(60, 60, 67, 0.68);
+  --color-text-tertiary: rgba(60, 60, 67, 0.42);
+  --color-text-quaternary: rgba(60, 60, 67, 0.28);
   --color-accent: #007AFF;
-  --color-accent-hover: #0056B3;
+  --color-accent-soft: rgba(0, 122, 255, 0.12);
+  --color-accent-hover: #0066D6;
+  --color-accent-pressed: #0055B3;
   --color-destructive: #FF3B30;
+  --color-destructive-soft: rgba(255, 59, 48, 0.12);
   --color-success: #34C759;
+  --color-success-soft: rgba(52, 199, 89, 0.12);
   --color-warning: #FF9500;
+  --color-warning-soft: rgba(255, 149, 0, 0.12);
+  --color-purple: #AF52DE;
+  --color-purple-soft: rgba(175, 82, 222, 0.12);
+  --color-orange: #FF9500;
+  --color-orange-soft: rgba(255, 149, 0, 0.12);
+  --color-red: #FF3B30;
+  --color-teal: #5AC8FA;
+  --color-teal-soft: rgba(90, 200, 250, 0.12);
+  --color-indigo: #5856D6;
+  --color-indigo-soft: rgba(88, 86, 214, 0.12);
+  --color-pink: #FF2D55;
+  --color-pink-soft: rgba(255, 45, 85, 0.12);
+  --color-cyan: #32ADE6;
+  --color-cyan-soft: rgba(50, 173, 230, 0.12);
+  --color-mint: #00C7BE;
+  --color-mint-soft: rgba(0, 199, 190, 0.12);
+  --color-fill-primary: rgba(120, 120, 128, 0.16);
+  --color-fill-secondary: rgba(120, 120, 128, 0.12);
+  --color-fill-tertiary: rgba(120, 120, 128, 0.08);
+  --color-fill-quaternary: rgba(120, 120, 128, 0.04);
 
-  /* Spacing */
-  --spacing-xs: 4px;
-  --spacing-sm: 8px;
-  --spacing-md: 16px;
-  --spacing-lg: 24px;
-  --spacing-xl: 32px;
-  --spacing-2xl: 48px;
-  --spacing-3xl: 64px;
+  /* Spacing - iOS-inspired rhythm (4pt base with enhanced scale) */
+  --spacing-0: 0px;
+  --spacing-px: 1px;
+  --spacing-0-5: 2px;
+  --spacing-1: 4px;
+  --spacing-1-5: 6px;
+  --spacing-2: 8px;
+  --spacing-2-5: 10px;
+  --spacing-3: 12px;
+  --spacing-3-5: 14px;
+  --spacing-4: 16px;
+  --spacing-5: 20px;
+  --spacing-6: 24px;
+  --spacing-7: 28px;
+  --spacing-8: 32px;
+  --spacing-9: 36px;
+  --spacing-10: 40px;
+  --spacing-11: 44px;
+  --spacing-12: 48px;
+  --spacing-14: 56px;
+  --spacing-16: 64px;
+  --spacing-20: 80px;
 
-  /* Border Radius */
+  /* Border Radius - iOS continuous corners (squircle-inspired) */
+  --radius-xs: 6px;
   --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --radius-2xl: 18px;
+  --radius-3xl: 22px;
+  --radius-4xl: 28px;
   --radius-full: 9999px;
 
-  /* Shadows - subtle and refined */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.10);
-  --shadow-xl: 0 8px 32px rgba(0, 0, 0, 0.12);
+  /* Shadows - refined iOS-style with natural depth (2026 ultra-subtle) */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.02);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.03);
+  --shadow-xl: 0 8px 28px rgba(0, 0, 0, 0.10), 0 4px 8px rgba(0, 0, 0, 0.04);
+  --shadow-2xl: 0 16px 48px rgba(0, 0, 0, 0.14), 0 6px 16px rgba(0, 0, 0, 0.06);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+  --shadow-card-hover: 0 6px 20px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.03);
+  --shadow-card-active: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-button: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 1px rgba(0, 0, 0, 0.04);
+  --shadow-button-active: 0 1px 1px rgba(0, 0, 0, 0.04);
+  --shadow-inset: inset 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-up-sm: 0 -1px 3px rgba(0, 0, 0, 0.05);
+  --shadow-up-lg: 0 -4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-sheet: 0 -8px 32px rgba(0, 0, 0, 0.12), 0 -2px 8px rgba(0, 0, 0, 0.04);
+  --shadow-nav: 0 1px 0 rgba(0, 0, 0, 0.04);
 
-  /* Blur */
+  /* Blur - frosted glass effects */
+  --blur-xs: 4px;
   --blur-sm: 8px;
   --blur-md: 16px;
   --blur-lg: 24px;
+  --blur-xl: 40px;
+  --blur-2xl: 64px;
+  --blur-3xl: 80px;
 
   /* Safe Area Insets */
   --safe-area-inset-top: env(safe-area-inset-top, 0px);
@@ -54,13 +122,20 @@
   --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-inset-left: env(safe-area-inset-left, 0px);
 
-  /* Animation */
-  --duration-fast: 150ms;
+  /* Animation - Apple-tuned curves with refined timing (iOS 18 / 2026) */
+  --duration-instant: 100ms;
+  --duration-fast: 180ms;
   --duration-normal: 250ms;
   --duration-slow: 350ms;
-  --ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --duration-slower: 450ms;
+  --duration-sheet: 400ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 1, 0.5);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.175);
+  --ease-ios: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease-ios-spring: cubic-bezier(0.16, 1.11, 0.3, 1.02);
+  --ease-bounce: cubic-bezier(0.34, 1.4, 0.64, 1);
 }
 
 /* ===== Base Styles ===== */
@@ -72,19 +147,24 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  font-feature-settings: "kern" 1, "liga" 1;
 }
 
 body {
   margin: 0;
   padding: 0;
   font-family: var(--font-sans);
-  background-color: var(--color-background);
+  background-color: var(--color-bg-grouped);
   color: var(--color-text-primary);
-  line-height: 1.5;
+  line-height: 1.47;
   font-size: 17px;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.022em;
   min-height: 100vh;
   min-height: 100dvh;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  scroll-behavior: smooth;
+  overscroll-behavior-y: none;
 }
 
 #root {
@@ -94,67 +174,119 @@ body {
   flex-direction: column;
 }
 
-/* ===== Typography Scale ===== */
-h1, .text-title-lg {
+/* ===== Typography Scale (SF Pro-inspired, 2026 refinements) ===== */
+.text-large-title, h1 {
   font-size: 34px;
   font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
+  line-height: 1.10;
+  letter-spacing: -0.4px;
 }
 
-h2, .text-title {
+.text-title-1, h2 {
   font-size: 28px;
   font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: -0.02em;
+  line-height: 1.14;
+  letter-spacing: -0.36px;
 }
 
-h3, .text-headline {
+.text-title-2 {
   font-size: 22px;
-  font-weight: 600;
-  line-height: 1.25;
-  letter-spacing: -0.01em;
+  font-weight: 700;
+  line-height: 1.18;
+  letter-spacing: -0.28px;
 }
 
-h4, .text-subhead {
+.text-title-3, h3 {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.20;
+  letter-spacing: -0.24px;
+}
+
+.text-headline, h4 {
   font-size: 17px;
   font-weight: 600;
+  line-height: 1.24;
+  letter-spacing: -0.41px;
+}
+
+.text-body, p {
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 1.47;
+  letter-spacing: -0.41px;
+}
+
+.text-callout {
+  font-size: 16px;
+  font-weight: 400;
   line-height: 1.35;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.32px;
 }
 
-p, .text-body {
-  font-size: 17px;
+.text-subheadline {
+  font-size: 15px;
   font-weight: 400;
-  line-height: 1.5;
-}
-
-.text-caption {
-  font-size: 13px;
-  font-weight: 400;
-  line-height: 1.4;
-  color: var(--color-text-secondary);
+  line-height: 1.40;
+  letter-spacing: -0.24px;
 }
 
 .text-footnote {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 400;
-  line-height: 1.35;
+  line-height: 1.42;
+  letter-spacing: -0.08px;
+  color: var(--color-text-secondary);
+}
+
+.text-caption-1 {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.33;
+  letter-spacing: 0px;
+  color: var(--color-text-tertiary);
+}
+
+.text-caption-2 {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.27;
+  letter-spacing: 0.06px;
+  color: var(--color-text-tertiary);
+}
+
+/* Section label - uppercase with proper letter spacing */
+.text-section-label {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.23;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
   color: var(--color-text-tertiary);
 }
 
 /* ===== Focus States ===== */
 :focus-visible {
+  outline: 3px solid var(--color-accent-soft);
+  outline-offset: 2px;
+}
+
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
 /* ===== Reduced Motion ===== */
 @media (prefers-reduced-motion: reduce) {
-  * {
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -176,14 +308,394 @@ p, .text-body {
   padding-bottom: var(--safe-area-inset-bottom);
 }
 
-.glass {
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: saturate(180%) blur(var(--blur-md));
-  -webkit-backdrop-filter: saturate(180%) blur(var(--blur-md));
+.safe-area-margin-bottom {
+  margin-bottom: var(--safe-area-inset-bottom);
 }
 
-.glass-light {
-  background: rgba(255, 255, 255, 0.88);
-  backdrop-filter: saturate(180%) blur(var(--blur-sm));
-  -webkit-backdrop-filter: saturate(180%) blur(var(--blur-sm));
+/* Glass morphism effects - refined for iOS 18 / 2026 aesthetic */
+.glass {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: saturate(180%) blur(var(--blur-xl));
+  -webkit-backdrop-filter: saturate(180%) blur(var(--blur-xl));
+}
+
+.glass-subtle {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: saturate(150%) blur(var(--blur-lg));
+  -webkit-backdrop-filter: saturate(150%) blur(var(--blur-lg));
+}
+
+.glass-solid {
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: saturate(140%) blur(var(--blur-md));
+  -webkit-backdrop-filter: saturate(140%) blur(var(--blur-md));
+}
+
+.glass-sheet {
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: saturate(180%) blur(var(--blur-3xl));
+  -webkit-backdrop-filter: saturate(180%) blur(var(--blur-3xl));
+}
+
+.glass-nav {
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: saturate(180%) blur(28px);
+  -webkit-backdrop-filter: saturate(180%) blur(28px);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.90);
+  backdrop-filter: saturate(160%) blur(var(--blur-lg));
+  -webkit-backdrop-filter: saturate(160%) blur(var(--blur-lg));
+}
+
+/* Hide scrollbar for carousel elements */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Note: grouped-list, section-header, list-row, list-separator replaced by
+   React components: Card variant="grouped", SectionLabel, ListRow, Separator */
+
+/* Touch target minimum */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* iOS-style tap highlight */
+@media (hover: none) {
+  .tap-highlight:active {
+    background-color: var(--color-fill-quaternary);
+  }
+}
+
+/* Smooth scroll for carousels */
+.scroll-smooth {
+  scroll-behavior: smooth;
+}
+
+/* iOS-native scroll behavior for sheets */
+.sheet-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Skeleton animation - ultra-smooth, subtle */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(120, 120, 128, 0.08) 0%,
+    rgba(120, 120, 128, 0.04) 50%,
+    rgba(120, 120, 128, 0.08) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+/* Pulse animation for subtle loading states */
+@keyframes subtle-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.animate-subtle-pulse {
+  animation: subtle-pulse 2s ease-in-out infinite;
+}
+
+/* Note: card-surface, card-surface-interactive, grouped-container
+   replaced by Card component variants */
+
+/* Active press state for buttons */
+.press-scale {
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.press-scale:active {
+  transform: scale(0.97);
+}
+
+/* Pill button style */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 var(--spacing-3);
+  border-radius: var(--radius-full);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.pill-active {
+  background-color: var(--color-accent);
+  color: white;
+  box-shadow: var(--shadow-xs);
+}
+
+.pill-inactive {
+  background-color: var(--color-fill-tertiary);
+  color: var(--color-text-secondary);
+}
+
+.pill-inactive:active {
+  background-color: var(--color-fill-secondary);
+}
+
+/* Drag indicator for bottom sheets - iOS HIG compliant */
+.drag-indicator {
+  width: 36px;
+  height: 5px;
+  border-radius: 100px;
+  background-color: rgba(60, 60, 67, 0.20);
+  margin: 8px auto 0;
+  flex-shrink: 0;
+}
+
+/* Note: section-label, section-group, inset-row, section-subhead
+   replaced by SectionLabel, Card variant="grouped", ListRow components */
+
+/* Header large title style */
+.large-title {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  line-height: 1.10;
+  color: var(--color-text-primary);
+}
+
+/* Segmented control */
+.segmented-control {
+  display: inline-flex;
+  padding: 2px;
+  background-color: var(--color-fill-tertiary);
+  border-radius: var(--radius-sm);
+}
+
+.segmented-control-item {
+  padding: 5px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  color: var(--color-text-secondary);
+  transition: all var(--duration-fast) var(--ease-ios);
+}
+
+.segmented-control-item[data-active="true"] {
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-xs);
+}
+
+/* Input field styling */
+.input-field {
+  height: 40px;
+  padding: 0 14px;
+  font-size: 16px;
+  background-color: var(--color-fill-tertiary);
+  border-radius: var(--radius-lg);
+  border: none;
+  color: var(--color-text-primary);
+  transition: box-shadow var(--duration-fast) var(--ease-ios);
+}
+
+.input-field::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.input-field:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-accent-soft);
+}
+
+/* Pill tag style - for topics, categories */
+.pill-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: var(--radius-full);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  background-color: var(--color-surface);
+  color: var(--color-text-secondary);
+  box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.04), 0 0 0 0.5px rgba(0, 0, 0, 0.02);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+/* Note: list-row-interactive, section-title, card-grouped, topic-pill,
+   list-row-inset, card-interactive replaced by ListRow, SectionLabel,
+   Card, Badge components */
+
+/* Page header subtitle */
+.page-subtitle {
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: -0.2px;
+  color: var(--color-text-secondary);
+  margin-top: -2px;
+}
+
+/* Refined bullet point */
+.bullet-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Source meta text */
+.meta-text {
+  font-size: 13px;
+  letter-spacing: -0.1px;
+  color: var(--color-text-tertiary);
+}
+
+/* Footer text */
+.footer-text {
+  font-size: 12px;
+  letter-spacing: -0.1px;
+  color: var(--color-text-quaternary);
+  line-height: 1.5;
+}
+
+/* Subtle focus ring */
+.focus-ring:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-accent-soft), 0 0 0 1px var(--color-accent);
+}
+
+/* iOS-style active state for list items */
+.list-active {
+  transition: background-color var(--duration-instant) var(--ease-out);
+}
+
+.list-active:active {
+  background-color: var(--color-fill-quaternary);
+}
+
+/* Content visibility optimization - prevents layout popping
+   Using auto allows browser to remember actual size after first render
+   280px = approximate height of card with image (2:1 aspect ~160px + content ~120px) */
+.content-visibility-auto {
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 280px;
+}
+
+/* Improved text rendering for headlines */
+.headline-text {
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "kern" 1, "liga" 1;
+  word-spacing: -0.02em;
+}
+
+/* Accent gradient for branded elements */
+.accent-gradient {
+  background: linear-gradient(135deg, var(--color-accent) 0%, #5856D6 100%);
+}
+
+/* Subtle inner shadow for inputs */
+.input-inset {
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+/* Enhanced loading spinner */
+@keyframes spin-smooth {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  animation: spin-smooth 0.8s linear infinite;
+}
+
+/* ===== Layout & Utility Patterns ===== */
+
+/* Section container with consistent vertical rhythm */
+.section-container {
+  margin-bottom: var(--spacing-8);
+}
+
+/* Page description text */
+.page-description {
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.52;
+  letter-spacing: -0.2px;
+  color: var(--color-text-secondary);
+}
+
+/* Stats/meta text */
+.stats-text {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.08px;
+  color: var(--color-text-tertiary);
+}
+
+/* Note: section-heading, card-container, card-row, separator-inset,
+   separator-full replaced by SectionLabel, Card, ListRow, Separator components */
+
+/* Accent dot indicator */
+.accent-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #007AFF 0%, #5856D6 100%);
+  flex-shrink: 0;
+}
+
+/* Note: pill-tag-refined, section-label-with-icon replaced by Badge, SectionLabel components */
+
+/* Smooth content fade-in */
+@keyframes content-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-content-in {
+  animation: content-fade-in var(--duration-normal) var(--ease-out);
+}
+
+/* Scroll shadow indicators */
+.scroll-shadow-top {
+  box-shadow: inset 0 12px 8px -8px rgba(0, 0, 0, 0.04);
+}
+
+.scroll-shadow-bottom {
+  box-shadow: inset 0 -12px 8px -8px rgba(0, 0, 0, 0.04);
 }

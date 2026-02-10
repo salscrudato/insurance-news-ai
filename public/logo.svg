@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g" x1="260" y1="180" x2="780" y2="920" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0A2A45"/>
+      <stop offset="55%" stop-color="#0D3A66"/>
+      <stop offset="100%" stop-color="#35D3FF"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Simple gradient shield (no text, no inner details) -->
+  <path d="M512 176
+           C654 176 776 248 776 380
+           V556
+           C776 702 654 824 512 904
+           C370 824 248 702 248 556
+           V380
+           C248 248 370 176 512 176
+           Z"
+        fill="url(#g)"/>
+</svg>

@@ -1,0 +1,116 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================================
+    // Helper Functions
+    // =========================================================================
+
+    // Check if the request is from an authenticated user
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if the authenticated user owns this resource
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    // =========================================================================
+    // Sources Collection: sources/{sourceId}
+    // Public read, server-only write (via Admin SDK)
+    // =========================================================================
+    match /sources/{sourceId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // =========================================================================
+    // Articles Collection: articles/{articleId}
+    // Public read, server-only write (via Admin SDK)
+    // =========================================================================
+    match /articles/{articleId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // =========================================================================
+    // Briefs Collection: briefs/{date}
+    // Public read, server-only write (via Admin SDK)
+    // Date format: yyyy-mm-dd
+    // =========================================================================
+    match /briefs/{date} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // =========================================================================
+    // Users Collection: users/{uid}
+    // Users can read/write their own profile
+    // =========================================================================
+    match /users/{uid} {
+      // Users can read their own profile
+      allow read: if isOwner(uid);
+      // Profile creation/updates handled by server, but allow client reads
+      allow write: if false;
+
+      // -----------------------------------------------------------------------
+      // Bookmarks Subcollection: users/{uid}/bookmarks/{articleId}
+      // Users can read/write their own bookmarks
+      // -----------------------------------------------------------------------
+      match /bookmarks/{articleId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && request.resource.data.articleId is string
+          && request.resource.data.title is string
+          && request.resource.data.sourceName is string
+          && request.resource.data.url is string
+          && request.resource.data.bookmarkedAt is timestamp;
+        allow update: if isOwner(uid);
+        allow delete: if isOwner(uid);
+      }
+
+      // -----------------------------------------------------------------------
+      // Preferences Subcollection: users/{uid}/prefs/{docId}
+      // Users can read/write their own preferences
+      // Only "main" document is expected
+      // -----------------------------------------------------------------------
+      match /prefs/{docId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && request.resource.data.enabledSourceIds is list
+          && request.resource.data.enabledCategories is list
+          && request.resource.data.notifications is map
+          && request.resource.data.updatedAt is timestamp;
+        allow update: if isOwner(uid)
+          && request.resource.data.updatedAt is timestamp;
+        allow delete: if isOwner(uid);
+      }
+
+      // -----------------------------------------------------------------------
+      // Push Tokens Subcollection: users/{uid}/pushTokens/{token}
+      // Users can read/write their own push notification tokens
+      // -----------------------------------------------------------------------
+      match /pushTokens/{tokenId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && request.resource.data.token is string
+          && request.resource.data.platform is string
+          && request.resource.data.createdAt is timestamp
+          && request.resource.data.updatedAt is timestamp;
+        allow update: if isOwner(uid)
+          && request.resource.data.updatedAt is timestamp;
+        allow delete: if isOwner(uid);
+      }
+    }
+
+    // =========================================================================
+    // Default: Deny all other access
+    // =========================================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

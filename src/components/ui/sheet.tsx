@@ -15,7 +15,7 @@ const SheetOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Overlay
     className={cn(
-      "fixed inset-0 z-50 bg-black/40 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      "fixed inset-0 z-50 bg-black/45 backdrop-blur-[8px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:duration-[var(--duration-fast)] data-[state=open]:duration-[var(--duration-normal)]",
       className
     )}
     {...props}
@@ -25,16 +25,16 @@ const SheetOverlay = React.forwardRef<
 SheetOverlay.displayName = DialogPrimitive.Overlay.displayName
 
 const sheetVariants = cva(
-  "fixed z-50 gap-4 bg-[var(--color-surface-elevated)] p-[var(--spacing-lg)] shadow-[var(--shadow-xl)] transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500 data-[state=open]:animate-in data-[state=closed]:animate-out",
+  "fixed z-50 bg-[var(--color-surface-elevated)] shadow-[var(--shadow-sheet)] transition ease-[var(--ease-ios)] data-[state=closed]:duration-[var(--duration-normal)] data-[state=open]:duration-[var(--duration-sheet)] data-[state=open]:animate-in data-[state=closed]:animate-out",
   {
     variants: {
       side: {
-        top: "inset-x-0 top-0 border-b border-[var(--color-border)] data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
+        top: "inset-x-0 top-0 data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
         bottom:
-          "inset-x-0 bottom-0 border-t border-[var(--color-border)] data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
-        left: "inset-y-0 left-0 h-full w-3/4 border-r border-[var(--color-border)] data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-sm",
+          "inset-x-0 bottom-0 rounded-t-[var(--radius-3xl)] data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
+        left: "inset-y-0 left-0 h-full w-3/4 data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-sm",
         right:
-          "inset-y-0 right-0 h-full w-3/4 border-l border-[var(--color-border)] data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-sm",
+          "inset-y-0 right-0 h-full w-3/4 data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-sm",
       },
     },
     defaultVariants: {
@@ -45,27 +45,43 @@ const sheetVariants = cva(
 
 interface SheetContentProps
   extends React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>,
-    VariantProps<typeof sheetVariants> {}
+    VariantProps<typeof sheetVariants> {
+  /** Hide the default close button (for bottom sheets with drag indicator) */
+  hideCloseButton?: boolean
+}
 
 const SheetContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
   SheetContentProps
->(({ side = "right", className, children, ...props }, ref) => (
-  <SheetPortal>
-    <SheetOverlay />
-    <DialogPrimitive.Content
-      ref={ref}
-      className={cn(sheetVariants({ side }), className)}
-      {...props}
-    >
-      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-[var(--radius-sm)] opacity-70 ring-offset-[var(--color-background)] transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-[var(--color-surface)]">
-        <X className="h-5 w-5" />
-        <span className="sr-only">Close</span>
-      </DialogPrimitive.Close>
-      {children}
-    </DialogPrimitive.Content>
-  </SheetPortal>
-))
+>(({ side = "right", className, children, hideCloseButton = false, ...props }, ref) => {
+  const isBottomSheet = side === "bottom"
+  const isSideSheet = side === "left" || side === "right"
+
+  return (
+    <SheetPortal>
+      <SheetOverlay />
+      <DialogPrimitive.Content
+        ref={ref}
+        className={cn(sheetVariants({ side }), className)}
+        {...props}
+      >
+        {/* Close button - positioned with safe area awareness for side sheets, hidden for bottom sheets by default */}
+        {!hideCloseButton && !isBottomSheet && (
+          <DialogPrimitive.Close
+            className={cn(
+              "absolute z-10 flex h-[32px] w-[32px] items-center justify-center rounded-full bg-[var(--color-fill-tertiary)] text-[var(--color-text-secondary)] transition-all duration-[var(--duration-fast)] hover:bg-[var(--color-fill-secondary)] active:scale-[0.92] focus:outline-none",
+              isSideSheet && "right-[16px] top-[calc(16px+var(--safe-area-inset-top))]"
+            )}
+          >
+            <X className="h-[15px] w-[15px]" strokeWidth={2.25} />
+            <span className="sr-only">Close</span>
+          </DialogPrimitive.Close>
+        )}
+        {children}
+      </DialogPrimitive.Content>
+    </SheetPortal>
+  )
+})
 SheetContent.displayName = DialogPrimitive.Content.displayName
 
 const SheetHeader = ({
@@ -74,7 +90,7 @@ const SheetHeader = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "flex flex-col space-y-2 text-center sm:text-left",
+      "flex flex-col gap-[4px] text-center sm:text-left",
       className
     )}
     {...props}
@@ -88,7 +104,7 @@ const SheetFooter = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2",
+      "flex flex-col-reverse gap-[10px] sm:flex-row sm:justify-end",
       className
     )}
     {...props}
@@ -102,7 +118,7 @@ const SheetTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn("text-[17px] font-semibold text-[var(--color-text-primary)]", className)}
+    className={cn("text-[20px] font-bold leading-[1.2] tracking-[-0.36px] text-[var(--color-text-primary)]", className)}
     {...props}
   />
 ))
@@ -114,7 +130,7 @@ const SheetDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Description
     ref={ref}
-    className={cn("text-[15px] text-[var(--color-text-secondary)]", className)}
+    className={cn("text-[14px] leading-[1.5] tracking-[-0.14px] text-[var(--color-text-secondary)]", className)}
     {...props}
   />
 ))
