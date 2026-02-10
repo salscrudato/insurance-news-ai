@@ -4,10 +4,8 @@ import FirebaseCore
 import FirebaseAuth
 import UserNotifications
 
-@UIApplicationMain
+@main
 class AppDelegate: UIResponder, UIApplicationDelegate {
-
-    var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Initialize Firebase FIRST
@@ -19,8 +17,20 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return true
     }
 
+    // MARK: - UIScene Configuration
+
+    func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        let config = UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
+        config.delegateClass = SceneDelegate.self
+        return config
+    }
+
+    func application(_ application: UIApplication, didDiscardSceneSessions sceneSessions: Set<UISceneSession>) {
+    }
+
+    // MARK: - Push Notifications
+
     private func registerForRemoteNotifications(_ application: UIApplication) {
-        // Request notification authorization
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
             if let error = error {
                 print("[AppDelegate] Notification authorization error: \(error)")
@@ -29,44 +39,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
             print("[AppDelegate] Notification authorization granted: \(granted)")
 
-            // Register for remote notifications on main thread
             DispatchQueue.main.async {
                 application.registerForRemoteNotifications()
             }
         }
     }
 
-    func applicationWillResignActive(_ application: UIApplication) {
-    }
-
-    func applicationDidEnterBackground(_ application: UIApplication) {
-    }
-
-    func applicationWillEnterForeground(_ application: UIApplication) {
-    }
-
-    func applicationDidBecomeActive(_ application: UIApplication) {
-    }
-
-    func applicationWillTerminate(_ application: UIApplication) {
-    }
-
-    func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
-        // Let Firebase Auth handle the URL if needed (e.g., OAuth redirects)
-        if Auth.auth().canHandle(url) {
-            return true
-        }
-        return ApplicationDelegateProxy.shared.application(app, open: url, options: options)
-    }
-
-    func application(_ application: UIApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void) -> Bool {
-        return ApplicationDelegateProxy.shared.application(application, continue: userActivity, restorationHandler: restorationHandler)
-    }
-
-    // MARK: - Push Notifications
-
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
-        // Forward device token to Firebase Auth (needed for some auth flows)
+        // Forward device token to Firebase Auth
         Auth.auth().setAPNSToken(deviceToken, type: .unknown)
 
         // Also notify Capacitor
@@ -84,8 +64,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             return
         }
 
-        // Handle other notifications if needed
         completionHandler(.noData)
     }
-
 }

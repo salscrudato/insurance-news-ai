@@ -11,6 +11,7 @@ import { SegmentedControl, type SegmentOption } from "@/components/ui/segmented-
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
@@ -156,6 +157,7 @@ export function SourceFilter({ sources, selectedIds, onChange }: SourceFilterPro
         <SheetHeader className="flex-row items-center justify-between px-[18px] pb-[12px] pt-[14px]">
           <div>
             <SheetTitle className="text-[17px] font-semibold tracking-[-0.32px]">Sources</SheetTitle>
+            <SheetDescription className="sr-only">Select news sources to filter articles</SheetDescription>
             {/* Limit indicator */}
             {selectedIds.length > 0 && (
               <p className={cn(

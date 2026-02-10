@@ -4,6 +4,7 @@ import { AppLogo } from "@/components/ui/app-logo"
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
@@ -161,6 +162,7 @@ export function MainLayout() {
       >
         <SheetHeader className="sr-only">
           <SheetTitle>Navigation Menu</SheetTitle>
+          <SheetDescription>Navigate between app sections</SheetDescription>
         </SheetHeader>
 
         <div className="flex h-full flex-col">
