@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom"
-import { Newspaper, LayoutList, Bookmark, Settings, ChevronRight, Sparkles, type LucideIcon } from "lucide-react"
+import { Newspaper, LayoutList, Settings, ChevronRight, Sparkles, type LucideIcon } from "lucide-react"
 import { AppLogo } from "@/components/ui/app-logo"
 import {
   Sheet,
@@ -9,7 +9,6 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet"
 import { useState } from "react"
-import { hapticMedium, hapticLight } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
 import { TopNav, MenuButton } from "@/components/layout"
 import { useLargeTitle } from "@/lib/hooks"
@@ -28,7 +27,6 @@ const primaryNavItems: NavItem[] = [
   { path: "/", label: "Today", icon: Newspaper, description: "Daily brief" },
   { path: "/feed", label: "Feed", icon: LayoutList, description: "All articles" },
   { path: "/ask", label: "Ask AI", icon: Sparkles, description: "Chat with sources" },
-  { path: "/bookmarks", label: "Bookmarks", icon: Bookmark, description: "Saved articles" },
 ]
 
 const secondaryNavItems: NavItem[] = [
@@ -73,7 +71,6 @@ export function MainLayout() {
       <button
         key={item.path}
         onClick={() => {
-          if (isActive) { hapticLight() } else { hapticMedium() }
           handleNavigation(item.path)
         }}
         className={cn(

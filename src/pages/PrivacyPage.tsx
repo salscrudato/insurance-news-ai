@@ -6,7 +6,6 @@
 
 import { ChevronLeft } from "lucide-react"
 import { useNavigate } from "react-router-dom"
-import { hapticLight } from "@/lib/haptics"
 import { openUrl } from "@/lib/browser"
 
 const EFFECTIVE_DATE = "February 10, 2026"
@@ -37,7 +36,6 @@ export function PrivacyPage() {
   const navigate = useNavigate()
 
   const handleBack = () => {
-    hapticLight()
     navigate(-1)
   }
 
@@ -96,8 +94,8 @@ export function PrivacyPage() {
               <li><strong className="text-[var(--color-text-primary)]">Google Sign-In:</strong> Your name and email address from your Google account.</li>
             </ul>
             <p>
-              <strong className="text-[var(--color-text-primary)]">Preferences &amp; bookmarks.</strong>{" "}
-              Your notification settings, source preferences, and saved articles are stored in Cloud Firestore and linked to your account.
+              <strong className="text-[var(--color-text-primary)]">Preferences.</strong>{" "}
+              Your notification settings and source preferences are stored in Cloud Firestore and linked to your account.
             </p>
             <p>
               <strong className="text-[var(--color-text-primary)]">Push notification tokens.</strong>{" "}
@@ -121,7 +119,7 @@ export function PrivacyPage() {
 
           <Section title="4. How We Use Your Data">
             <ul className="list-disc pl-[20px] space-y-[4px]">
-              <li>Provide and operate the App's features (briefs, feed, bookmarks, AI chat)</li>
+              <li>Provide and operate the App's features (briefs, feed, AI chat)</li>
               <li>Authenticate your identity and sync data across devices</li>
               <li>Deliver push notifications you've opted into</li>
               <li>Improve App performance and fix issues</li>
@@ -152,20 +150,17 @@ export function PrivacyPage() {
 
           <Section title="6. Data Retention">
             <p>
-              Your account data (preferences, bookmarks, chat threads) is retained as long as your account exists. When you delete your account (see section 7), all associated data is permanently and immediately removed from our systems. Aggregated, anonymized analytics may be retained for up to 26 months.
+              Your account data (preferences, chat threads) is retained as long as your account exists. When you delete your account (see section 7), all associated data is permanently and immediately removed from our systems. Aggregated, anonymized analytics may be retained for up to 26 months.
             </p>
           </Section>
 
           <Section title="7. Your Controls">
             <ul className="list-disc pl-[20px] space-y-[4px]">
               <li>
-                <strong className="text-[var(--color-text-primary)]">Delete Account:</strong> You can permanently delete your account and all associated data directly in the App by going to <strong className="text-[var(--color-text-primary)]">Settings → Delete Account</strong>. This removes your authentication credentials, preferences, bookmarks, chat history, push tokens, and all other stored data. This action is immediate and irreversible.
+                <strong className="text-[var(--color-text-primary)]">Delete Account:</strong> You can permanently delete your account and all associated data directly in the App by going to <strong className="text-[var(--color-text-primary)]">Settings → Delete Account</strong>. This removes your authentication credentials, preferences, chat history, push tokens, and all other stored data. This action is immediate and irreversible.
               </li>
               <li>
                 <strong className="text-[var(--color-text-primary)]">Notifications:</strong> Disable daily brief notifications in Settings at any time.
-              </li>
-              <li>
-                <strong className="text-[var(--color-text-primary)]">Bookmarks:</strong> Remove individual bookmarks from your reading list.
               </li>
               <li>
                 <strong className="text-[var(--color-text-primary)]">Chat history:</strong> Delete Ask AI conversation threads from within the App.

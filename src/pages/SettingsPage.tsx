@@ -31,7 +31,6 @@ import {
   usePushNotifications,
 } from "@/lib/hooks"
 import { useAuth } from "@/lib/auth-context"
-import { hapticLight, hapticSuccess, hapticWarning, hapticError } from "@/lib/haptics"
 import { httpsCallable } from "firebase/functions"
 import { functions } from "@/lib/firebase"
 import { toast } from "sonner"
@@ -71,20 +70,14 @@ export function SettingsPage() {
   const canEnableNotifications = pushSupported && permissionStatus !== "denied"
 
   const handleNotificationToggle = async (checked: boolean) => {
-    hapticLight()
-
     if (checked && permissionStatus !== "granted") {
       const success = await enableNotifications()
-      if (success) {
-        hapticSuccess()
-      }
       if (!success) return
     }
     toggleNotifications.mutate({ dailyBrief: checked })
   }
 
   const handleSignOutClick = () => {
-    hapticWarning()
     setShowSignOutSheet(true)
   }
 
@@ -93,7 +86,6 @@ export function SettingsPage() {
     try {
       await signOut()
       setShowSignOutSheet(false)
-      hapticSuccess()
       navigate("/auth", { replace: true })
     } catch (error) {
       console.error("Sign out failed:", error)
@@ -104,7 +96,6 @@ export function SettingsPage() {
 
   // Delete Account
   const handleDeleteAccountClick = () => {
-    hapticWarning()
     setShowDeleteSheet(true)
   }
 
@@ -112,7 +103,6 @@ export function SettingsPage() {
     setIsDeleting(true)
     try {
       await deleteAccountCallable()
-      hapticSuccess()
       toast.success("Account deleted", {
         description: "Your account and all associated data have been permanently removed.",
       })
@@ -134,7 +124,6 @@ export function SettingsPage() {
       navigate("/auth", { replace: true })
     } catch (error) {
       console.error("Account deletion failed:", error)
-      hapticError()
       toast.error("Deletion failed", {
         description: "Something went wrong. Please try again.",
       })
@@ -243,10 +232,7 @@ export function SettingsPage() {
             variant="compact"
             interactive
             hasChevron
-            onClick={() => {
-              hapticLight()
-              navigate("/terms")
-            }}
+            onClick={() => navigate("/terms")}
             aria-label="Terms of Service"
           >
             <ListRowIcon>
@@ -262,10 +248,7 @@ export function SettingsPage() {
             variant="compact"
             interactive
             hasChevron
-            onClick={() => {
-              hapticLight()
-              navigate("/privacy")
-            }}
+            onClick={() => navigate("/privacy")}
             aria-label="Privacy Policy"
           >
             <ListRowIcon>
@@ -316,7 +299,7 @@ export function SettingsPage() {
             </ListRow>
           </Card>
           <SectionFooter inset>
-            Permanently delete your account and all associated data including preferences, bookmarks, chat history, and push notification tokens.
+            Permanently delete your account and all associated data including preferences, chat history, and push notification tokens.
           </SectionFooter>
         </section>
       )}
@@ -351,7 +334,7 @@ export function SettingsPage() {
           <SheetDescription className="mt-[8px] text-center text-[15px] leading-[1.45] tracking-[-0.2px] text-[var(--color-text-secondary)]">
             {isAnonymous
               ? "You\u2019re signed in as a guest. Your reading history and preferences will be cleared."
-              : "Your bookmarks and preferences will be saved to your account and restored when you sign back in."
+              : "Your preferences will be saved to your account and restored when you sign back in."
             }
           </SheetDescription>
 
@@ -364,10 +347,7 @@ export function SettingsPage() {
               {isSigningOut ? "Signing Out\u2026" : "Sign Out"}
             </button>
             <button
-              onClick={() => {
-                hapticLight()
-                setShowSignOutSheet(false)
-              }}
+              onClick={() => setShowSignOutSheet(false)}
               disabled={isSigningOut}
               className="w-full rounded-[var(--radius-xl)] bg-[var(--color-fill-tertiary)] py-[15px] text-[17px] font-semibold tracking-[-0.4px] text-[var(--color-text-primary)] transition-all duration-[var(--duration-fast)] ease-[var(--ease-ios)] active:scale-[0.98] active:bg-[var(--color-fill-secondary)] disabled:opacity-50"
             >
@@ -400,7 +380,6 @@ export function SettingsPage() {
             {[
               "Your account and login credentials",
               "Notification preferences and push tokens",
-              "Saved bookmarks",
               "Ask AI chat history",
               "All other associated data",
             ].map((item) => (
@@ -427,10 +406,7 @@ export function SettingsPage() {
               )}
             </button>
             <button
-              onClick={() => {
-                hapticLight()
-                setShowDeleteSheet(false)
-              }}
+              onClick={() => setShowDeleteSheet(false)}
               disabled={isDeleting}
               className="w-full rounded-[var(--radius-xl)] bg-[var(--color-fill-tertiary)] py-[15px] text-[17px] font-semibold tracking-[-0.4px] text-[var(--color-text-primary)] transition-all duration-[var(--duration-fast)] ease-[var(--ease-ios)] active:scale-[0.98] active:bg-[var(--color-fill-secondary)] disabled:opacity-50"
             >

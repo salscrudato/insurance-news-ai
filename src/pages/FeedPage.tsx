@@ -23,7 +23,6 @@ import {
   ArticleDetailSheet,
 } from "@/components/feed"
 import { EmptyState, ErrorState } from "@/components/ui"
-import { hapticMedium } from "@/lib/haptics"
 import type { SourceCategory } from "@/types/firestore"
 
 /** Prefetch articles when trigger is within this distance from viewport */
@@ -128,7 +127,6 @@ export function FeedPage() {
   )
 
   const handleSelectArticle = (article: ArticleFromApi) => {
-    hapticMedium()
     setSelectedArticle(article)
     setSheetOpen(true)
   }

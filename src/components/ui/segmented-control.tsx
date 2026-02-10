@@ -12,7 +12,6 @@
 
 import * as React from "react"
 import { cn } from "@/lib/utils"
-import { hapticLight } from "@/lib/haptics"
 
 export interface SegmentOption<T extends string> {
   value: T
@@ -67,7 +66,6 @@ export function SegmentedControl<T extends string>({
 
   const handleSelect = (optValue: T) => {
     if (optValue !== value) {
-      hapticLight()
       onChange(optValue)
     }
   }

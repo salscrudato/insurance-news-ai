@@ -5,7 +5,6 @@
 
 import { ChevronLeft } from "lucide-react"
 import { useNavigate } from "react-router-dom"
-import { hapticLight } from "@/lib/haptics"
 import { openUrl } from "@/lib/browser"
 
 const EFFECTIVE_DATE = "February 10, 2026"
@@ -36,7 +35,6 @@ export function TermsPage() {
   const navigate = useNavigate()
 
   const handleBack = () => {
-    hapticLight()
     navigate(-1)
   }
 
@@ -102,10 +100,10 @@ export function TermsPage() {
 
           <Section title="4. User Accounts">
             <p>
-              The App supports anonymous (guest) authentication and optional sign-in via Apple or Google. Your preferences, bookmarks, and chat history are associated with your account.
+              The App supports anonymous (guest) authentication and optional sign-in via Apple or Google. Your preferences and chat history are associated with your account.
             </p>
             <p>
-              You may delete your account at any time from <strong className="text-[var(--color-text-primary)]">Settings → Delete Account</strong>. Deleting your account permanently removes all associated data including preferences, bookmarks, chat history, and push notification tokens. This action is immediate and cannot be undone.
+              You may delete your account at any time from <strong className="text-[var(--color-text-primary)]">Settings → Delete Account</strong>. Deleting your account permanently removes all associated data including preferences, chat history, and push notification tokens. This action is immediate and cannot be undone.
             </p>
             <p>
               Signing out of a guest account will clear associated data.

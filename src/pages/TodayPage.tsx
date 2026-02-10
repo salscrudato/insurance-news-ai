@@ -21,7 +21,6 @@ import {
   ArticleSheet,
 } from "@/components/brief"
 import { EmptyState, ErrorState, SectionLabel, Card } from "@/components/ui"
-import { hapticMedium, hapticLight } from "@/lib/haptics"
 
 function formatDate(dateString: string): string {
   const date = new Date(dateString + "T12:00:00")
@@ -83,13 +82,11 @@ export function TodayPage() {
   const [sheetOpen, setSheetOpen] = useState(false)
 
   const handleSelectStory = (story: TopStoryWithArticle) => {
-    hapticMedium()
     setSelectedStory(story)
     setSheetOpen(true)
   }
 
   const handleTopicClick = (topic: string) => {
-    hapticLight()
     navigate(`/feed?q=${encodeURIComponent(topic)}`)
   }
 

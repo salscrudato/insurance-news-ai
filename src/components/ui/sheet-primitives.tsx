@@ -149,7 +149,7 @@ export function SheetSnippet({ children, className }: SheetSnippetProps) {
 
 interface SheetActionsProps {
   onReadArticle: () => void
-  secondaryButton: React.ReactNode
+  secondaryButton?: React.ReactNode
   primaryLabel?: string
   className?: string
 }

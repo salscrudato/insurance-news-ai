@@ -16,7 +16,6 @@ import { useNavigate } from "react-router-dom"
 import { Menu, ChevronLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { AppLogo } from "@/components/ui/app-logo"
-import { hapticLight, hapticMedium } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
 
 interface TopNavProps {
@@ -48,7 +47,6 @@ export function TopNav({
   const navigate = useNavigate()
 
   const handleBack = () => {
-    hapticLight()
     if (onBack) {
       onBack()
     } else {
@@ -162,7 +160,6 @@ export const MenuButton = React.forwardRef<HTMLButtonElement, MenuButtonProps>(
           className
         )}
         onClick={(e) => {
-          hapticMedium()
           onClick?.(e)
         }}
       >

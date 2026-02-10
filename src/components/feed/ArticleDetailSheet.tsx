@@ -6,7 +6,7 @@
  * - Hero image (when available)
  * - AI Analysis card: TL;DR, Why it matters for P&C, Key implications
  * - Auto-generates AI analysis when sheet opens (low-cost, cached)
- * - Actions: Read Article (Capacitor Browser on iOS), Bookmark
+ * - Actions: Read Article (Capacitor Browser on iOS)
  */
 
 import { useState, useEffect, useRef, useMemo } from "react"
@@ -16,18 +16,16 @@ import {
   SheetHeaderBlock,
   SheetSnippet,
   SheetActions,
-  SheetIconButton,
   SheetAICard,
   SheetAICardSkeleton,
 } from "@/components/ui/sheet-primitives"
-import { Bookmark, Sparkles, AlertCircle } from "lucide-react"
+import { Sparkles, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
-import { useIsBookmarked, useToggleBookmark, useArticleAI } from "@/lib/hooks"
+import { useArticleAI } from "@/lib/hooks"
 import { useAuth } from "@/lib/auth-context"
 import type { Article, ArticleAI } from "@/types/firestore"
 import type { ArticleFromApi } from "@/lib/hooks"
 import type { Timestamp } from "firebase/firestore"
-import { hapticMedium, hapticLight } from "@/lib/haptics"
 import { openUrl } from "@/lib/browser"
 import { cn } from "@/lib/utils"
 
@@ -65,8 +63,6 @@ export function ArticleDetailSheet({
   onOpenChange,
 }: ArticleDetailSheetProps) {
   const { isAuthenticated, isAnonymous } = useAuth()
-  const { data: isBookmarked } = useIsBookmarked(article?.id)
-  const toggleBookmark = useToggleBookmark()
   const generateAI = useArticleAI()
 
   // Generated AI content (from API call), keyed by article ID
@@ -127,34 +123,7 @@ export function ArticleDetailSheet({
   if (!article) return null
 
   const handleOpenArticle = async () => {
-    hapticMedium()
     await openUrl(article.url)
-  }
-
-  const handleBookmark = () => {
-    if (!isAuthenticated) {
-      toast.error("Sign in to bookmark articles")
-      return
-    }
-    if (isAnonymous) {
-      toast.error("Guests cannot bookmark articles", {
-        description: "Sign in to save articles for later",
-      })
-      return
-    }
-    hapticLight()
-
-    toggleBookmark.mutate(
-      { article, isCurrentlyBookmarked: !!isBookmarked },
-      {
-        onSuccess: ({ bookmarked }) => {
-          toast.success(bookmarked ? "Article saved" : "Bookmark removed")
-        },
-        onError: () => {
-          toast.error("Failed to update bookmark")
-        },
-      }
-    )
   }
 
   const handleRetryAI = () => {
@@ -162,7 +131,6 @@ export function ArticleDetailSheet({
       toast.error("Sign in to unlock AI insights")
       return
     }
-    hapticLight()
     setAiError(false)
 
     generateAI.mutate(article.id, {
@@ -280,19 +248,6 @@ export function ArticleDetailSheet({
         <SheetActions
           onReadArticle={handleOpenArticle}
           primaryLabel="Read Full Article"
-          secondaryButton={
-            <SheetIconButton
-              onClick={handleBookmark}
-              disabled={toggleBookmark.isPending}
-              loading={toggleBookmark.isPending}
-              aria-label={isBookmarked ? "Remove bookmark" : "Bookmark article"}
-            >
-              <Bookmark
-                className="h-[20px] w-[20px]"
-                fill={isBookmarked ? "currentColor" : "none"}
-              />
-            </SheetIconButton>
-          }
         />
       </SheetContent>
     </Sheet>

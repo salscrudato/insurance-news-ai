@@ -24,7 +24,6 @@ import { useMutation, useQuery } from "@tanstack/react-query"
 import { doc, getDoc } from "firebase/firestore"
 import { signInAnonymously } from "firebase/auth"
 import { db, auth } from "@/lib/firebase"
-import { hapticLight, hapticMedium } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { useUserPreferences } from "@/lib/hooks"
@@ -311,8 +310,6 @@ export function AskPage() {
 
   // ── New Chat ──
   const handleNewChat = useCallback(() => {
-    hapticMedium()
-
     // If current session is empty, just stay
     if (messages.length === 0 && activeSessionId) return
 
@@ -335,8 +332,6 @@ export function AskPage() {
 
   // ── Open a session from history ──
   const handleOpenSession = useCallback((sessionId: string) => {
-    hapticLight()
-
     // Abort any in-flight stream
     abortControllerRef.current?.abort()
     abortControllerRef.current = null
@@ -355,8 +350,6 @@ export function AskPage() {
 
   // ── Delete a session ──
   const handleDeleteSession = useCallback((sessionId: string) => {
-    hapticMedium()
-
     deleteSessionStorage(sessionId)
     setSessions((prev) => {
       const updated = prev.filter((s) => s.id !== sessionId)
@@ -545,7 +538,6 @@ export function AskPage() {
                       : msg
                   )
                 )
-                hapticLight()
               } else if (data.text !== undefined) {
                 // Streaming text chunk
                 setMessages((prev) =>
@@ -603,8 +595,6 @@ export function AskPage() {
         toast.error("Sign in to ask questions")
         return
       }
-
-      hapticMedium()
 
       // ── Ensure we have an active session ──
       let currentSessionId = activeSessionId
@@ -750,7 +740,6 @@ export function AskPage() {
 
   // Handle citation click - open article detail sheet
   const handleCitationClick = useCallback((citation: RagCitation) => {
-    hapticLight()
     trackEvent("citation_opened", { article_id: citation.articleId })
     setSelectedArticleId(citation.articleId)
     setArticleSheetOpen(true)
@@ -778,7 +767,6 @@ export function AskPage() {
       <div className="shrink-0 flex items-center justify-between px-[12px] h-[40px] border-b border-[var(--color-separator-light)] bg-[var(--color-surface)]">
         <button
           onClick={() => {
-            hapticLight()
             setHistoryOpen((v) => !v)
           }}
           aria-label="Chat history"
@@ -871,7 +859,6 @@ export function AskPage() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          hapticLight()
                           setConfirmingDelete(session.id)
                         }}
                         aria-label={`Delete conversation: ${session.title}`}
@@ -1330,10 +1317,7 @@ function SourceCard({ citation, onClick }: { citation: RagCitation; onClick: (c:
 
   return (
     <button
-      onClick={() => {
-        hapticLight()
-        onClick(citation)
-      }}
+      onClick={() => onClick(citation)}
       aria-label={`View article: ${citation.title}`}
       className="group w-full text-left flex items-center gap-[10px] rounded-[12px] bg-[var(--color-fill-quaternary)] px-[14px] py-[11px] transition-all duration-150 active:scale-[0.98] active:bg-[var(--color-fill-tertiary)]"
     >

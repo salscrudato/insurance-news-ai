@@ -17,7 +17,6 @@ import {
 } from "@/components/ui/sheet"
 import type { SourceCategory } from "@/types/firestore"
 import { cn } from "@/lib/utils"
-import { hapticLight, hapticWarning } from "@/lib/haptics"
 
 // Maximum sources allowed due to Firestore 'in' query limitation
 export const MAX_SOURCE_FILTER = 10
@@ -47,7 +46,6 @@ interface CategoryChipsProps {
 
 export function CategoryChips({ value, onChange }: CategoryChipsProps) {
   const handleChange = (newValue: SourceCategory | "all") => {
-    hapticLight()
     onChange(newValue)
   }
 
@@ -116,19 +114,13 @@ export function SourceFilter({ sources, selectedIds, onChange }: SourceFilterPro
     const isSelected = selectedIds.includes(id)
 
     if (isSelected) {
-      hapticLight()
       onChange(selectedIds.filter((s) => s !== id))
     } else if (!atLimit) {
-      hapticLight()
       onChange([...selectedIds, id])
-    } else {
-      // At limit - provide warning haptic
-      hapticWarning()
     }
   }
 
   const clearAll = () => {
-    hapticLight()
     onChange([])
   }
 
@@ -148,7 +140,6 @@ export function SourceFilter({ sources, selectedIds, onChange }: SourceFilterPro
               ? "text-[var(--color-accent)]"
               : "text-[var(--color-text-secondary)]"
           )}
-          onClick={() => hapticLight()}
           aria-label={`Filter sources: ${label}`}
         >
           <Newspaper className="h-[13px] w-[13px] shrink-0 opacity-50" strokeWidth={1.8} />

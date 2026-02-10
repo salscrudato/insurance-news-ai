@@ -10,7 +10,6 @@ import { useNavigate, Link } from "react-router-dom"
 import { Loader2 } from "lucide-react"
 import { AppLogo } from "@/components/ui/app-logo"
 import { useAuth } from "@/lib/auth-context"
-import { hapticLight, hapticSuccess, hapticWarning } from "@/lib/haptics"
 
 // ---------------------------------------------------------------------------
 // Auth Page
@@ -28,16 +27,13 @@ export function AuthPage() {
   const handleAppleSignIn = async () => {
     setError(null)
     setIsLoading("apple")
-    hapticLight()
 
     try {
       await signInWithApple()
-      hapticSuccess()
       navigate("/", { replace: true })
     } catch (err) {
       console.error("Apple sign-in failed:", err)
       setError("Apple sign-in failed. Please try again.")
-      hapticWarning()
     } finally {
       setIsLoading(null)
     }
@@ -49,16 +45,13 @@ export function AuthPage() {
   const handleGoogleSignIn = async () => {
     setError(null)
     setIsLoading("google")
-    hapticLight()
 
     try {
       await signInWithGoogle()
-      hapticSuccess()
       navigate("/", { replace: true })
     } catch (err) {
       console.error("Google sign-in failed:", err)
       setError("Google sign-in failed. Please try again.")
-      hapticWarning()
     } finally {
       setIsLoading(null)
     }
@@ -70,16 +63,13 @@ export function AuthPage() {
   const handleContinueAsGuest = async () => {
     setError(null)
     setIsLoading("guest")
-    hapticLight()
 
     try {
       await continueAsGuest()
-      hapticSuccess()
       navigate("/", { replace: true })
     } catch (err) {
       console.error("[AuthPage] handleContinueAsGuest failed:", err)
       setError(err instanceof Error ? err.message : "Failed to continue as guest. Please try again.")
-      hapticWarning()
     } finally {
       setIsLoading(null)
     }
@@ -170,7 +160,7 @@ export function AuthPage() {
 
         {/* Disclaimer */}
         <p className="max-w-[240px] text-center text-[12px] leading-[1.45] tracking-[-0.08px] text-[var(--color-text-quaternary)]">
-          Sign in to save bookmarks and sync across devices
+          Sign in to sync preferences and unlock AI features
         </p>
 
         {/* Terms & Privacy */}
@@ -181,7 +171,6 @@ export function AuthPage() {
           <Link
             to="/terms"
             className="text-[12px] font-medium tracking-[-0.08px] text-[var(--color-text-tertiary)] underline underline-offset-2 transition-colors active:text-[var(--color-text-secondary)]"
-            onClick={() => hapticLight()}
           >
             Terms of Service
           </Link>
@@ -189,7 +178,6 @@ export function AuthPage() {
           <Link
             to="/privacy"
             className="text-[12px] font-medium tracking-[-0.08px] text-[var(--color-text-tertiary)] underline underline-offset-2 transition-colors active:text-[var(--color-text-secondary)]"
-            onClick={() => hapticLight()}
           >
             Privacy Policy
           </Link>

@@ -1,140 +1,12 @@
 /**
- * Hooks for bookmark management
+ * Hooks for article AI management
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import {
-  collection,
-  doc,
-  getDocs,
-  getDoc,
-  setDoc,
-  deleteDoc,
-  orderBy,
-  query,
-  limit,
-  Timestamp,
-} from "firebase/firestore"
 import { httpsCallable } from "firebase/functions"
-import { db, functions } from "@/lib/firebase"
+import { functions } from "@/lib/firebase"
 import { useAuth } from "@/lib/auth-context"
-import type { Bookmark, ArticleAI } from "@/types/firestore"
-
-// Maximum bookmarks to fetch (most users won't have more than this)
-const MAX_BOOKMARKS = 100
-
-// ============================================================================
-// Bookmarks Hooks
-// ============================================================================
-
-/**
- * Fetch bookmarks for the current user (limited to prevent excessive reads).
- *
- * When auth is resolved but there is no Firebase user (e.g. local guest mode,
- * or anonymous without a real Firebase UID), the query is still enabled and
- * immediately returns an empty array so the UI never gets stuck in a loading
- * state.
- */
-export function useBookmarks() {
-  const { user, isLoading: authLoading } = useAuth()
-
-  return useQuery({
-    queryKey: ["bookmarks", user?.uid ?? "none"],
-    queryFn: async () => {
-      // No Firebase user → nothing to fetch
-      if (!user) return []
-
-      const bookmarksRef = collection(db, "users", user.uid, "bookmarks")
-      const q = query(bookmarksRef, orderBy("bookmarkedAt", "desc"), limit(MAX_BOOKMARKS))
-      const snapshot = await getDocs(q)
-
-      return snapshot.docs.map((doc) => ({
-        ...doc.data(),
-        articleId: doc.id,
-      })) as Bookmark[]
-    },
-    // Enable as soon as auth state is resolved — even when user is null
-    // so the query settles to [] and isLoading becomes false.
-    enabled: !authLoading,
-    staleTime: 1000 * 60 * 5, // 5 minutes
-  })
-}
-
-/**
- * Check if a specific article is bookmarked.
- * Resolves to `false` immediately when there is no Firebase user.
- */
-export function useIsBookmarked(articleId: string | undefined) {
-  const { user, isLoading: authLoading } = useAuth()
-
-  return useQuery({
-    queryKey: ["bookmark", user?.uid ?? "none", articleId],
-    queryFn: async () => {
-      if (!user || !articleId) return false
-      
-      const bookmarkRef = doc(db, "users", user.uid, "bookmarks", articleId)
-      const snapshot = await getDoc(bookmarkRef)
-      return snapshot.exists()
-    },
-    // Enable when auth is resolved AND we have an articleId.
-    // When user is null the queryFn returns false immediately.
-    enabled: !authLoading && !!articleId,
-    staleTime: 1000 * 60 * 5, // 5 minutes
-  })
-}
-
-// Minimum article fields needed for bookmarking
-interface BookmarkableArticle {
-  id: string
-  title: string
-  sourceName: string
-  url: string
-}
-
-interface ToggleBookmarkParams {
-  article: BookmarkableArticle
-  isCurrentlyBookmarked: boolean
-}
-
-/**
- * Toggle bookmark status for an article
- * Note: Anonymous/guest users cannot bookmark articles
- */
-export function useToggleBookmark() {
-  const { user, isAnonymous } = useAuth()
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: async ({ article, isCurrentlyBookmarked }: ToggleBookmarkParams) => {
-      if (!user) throw new Error("Must be authenticated to bookmark")
-      if (isAnonymous) throw new Error("Guests cannot bookmark articles. Please sign in to save articles.")
-
-      const bookmarkRef = doc(db, "users", user.uid, "bookmarks", article.id)
-      
-      if (isCurrentlyBookmarked) {
-        // Remove bookmark
-        await deleteDoc(bookmarkRef)
-        return { bookmarked: false }
-      } else {
-        // Add bookmark
-        const bookmark: Bookmark = {
-          articleId: article.id,
-          title: article.title,
-          sourceName: article.sourceName,
-          url: article.url,
-          bookmarkedAt: Timestamp.now(),
-        }
-        await setDoc(bookmarkRef, bookmark)
-        return { bookmarked: true }
-      }
-    },
-    onSuccess: (_, { article }) => {
-      // Invalidate bookmark queries
-      queryClient.invalidateQueries({ queryKey: ["bookmarks", user?.uid] })
-      queryClient.invalidateQueries({ queryKey: ["bookmark", user?.uid, article.id] })
-    },
-  })
-}
+import type { ArticleAI } from "@/types/firestore"
 
 // ============================================================================
 // Article AI Hook
@@ -185,4 +57,3 @@ export function useCachedArticleAI(articleId: string | undefined) {
     staleTime: Infinity,
   })
 }
-

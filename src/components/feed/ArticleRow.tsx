@@ -2,18 +2,13 @@
  * Article row component for the feed list
  */
 
-import { Bookmark, Loader2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import { toast } from "sonner"
-import { useIsBookmarked, useToggleBookmark } from "@/lib/hooks"
-import { useAuth } from "@/lib/auth-context"
 import type { Article } from "@/types/firestore"
 import type { Timestamp } from "firebase/firestore"
 
 interface ArticleRowProps {
   article: Article
   onSelect: (article: Article) => void
-  showBookmark?: boolean
 }
 
 function formatRelativeTime(timestamp: Timestamp): string {
@@ -35,39 +30,7 @@ function formatRelativeTime(timestamp: Timestamp): string {
   }
 }
 
-export function ArticleRow({ article, onSelect, showBookmark = true }: ArticleRowProps) {
-  const { isAuthenticated, isAnonymous } = useAuth()
-  const { data: isBookmarked } = useIsBookmarked(showBookmark ? article.id : undefined)
-  const toggleBookmark = useToggleBookmark()
-
-  const handleBookmarkClick = (e: React.MouseEvent) => {
-    e.stopPropagation()
-
-    if (!isAuthenticated) {
-      toast.error("Sign in to bookmark articles")
-      return
-    }
-
-    if (isAnonymous) {
-      toast.error("Guests cannot bookmark articles", {
-        description: "Sign in to save articles for later",
-      })
-      return
-    }
-
-    toggleBookmark.mutate(
-      { article, isCurrentlyBookmarked: !!isBookmarked },
-      {
-        onSuccess: ({ bookmarked }) => {
-          toast.success(bookmarked ? "Article saved" : "Bookmark removed")
-        },
-        onError: () => {
-          toast.error("Failed to update bookmark")
-        },
-      }
-    )
-  }
-
+export function ArticleRow({ article, onSelect }: ArticleRowProps) {
   const handleRowClick = () => {
     onSelect(article)
   }
@@ -107,25 +70,6 @@ export function ArticleRow({ article, onSelect, showBookmark = true }: ArticleRo
           {article.snippet}
         </p>
       </div>
-
-      {/* Bookmark button */}
-      {showBookmark && (
-        <button
-          onClick={handleBookmarkClick}
-          disabled={toggleBookmark.isPending}
-          className="shrink-0 self-start rounded-full p-2 text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-surface)] hover:text-[var(--color-accent)] disabled:opacity-50"
-          aria-label={isBookmarked ? "Remove bookmark" : "Add bookmark"}
-        >
-          {toggleBookmark.isPending ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
-          ) : (
-            <Bookmark
-              className="h-5 w-5"
-              fill={isBookmarked ? "currentColor" : "none"}
-            />
-          )}
-        </button>
-      )}
     </div>
   )
 }
@@ -142,8 +86,6 @@ export function ArticleRowSkeleton() {
         <div className="h-5 w-3/4 animate-pulse rounded bg-[var(--color-surface)]" />
         <div className="h-4 w-full animate-pulse rounded bg-[var(--color-surface)]" />
       </div>
-      <div className="h-9 w-9 shrink-0 animate-pulse rounded-full bg-[var(--color-surface)]" />
     </div>
   )
 }
-
