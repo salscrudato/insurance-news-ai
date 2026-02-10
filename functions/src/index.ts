@@ -1,5 +1,25 @@
 /**
  * Firebase Cloud Functions (v2)
+ *
+ * P&C Insurance News AI — Backend API
+ *
+ * Endpoints:
+ * - apiHealth: Health check with version info
+ * - adminSetSourceEnabled: Admin toggle for RSS sources
+ * - ingestRssFeeds: Scheduled RSS ingestion (hourly)
+ * - adminBackfillLast7Days: Admin one-time backfill
+ * - triggerIngestion: Manual ingestion trigger (API key protected)
+ * - adminBackfillMissingImages: Admin image backfill
+ * - getOrCreateArticleAI: AI summary generation (rate-limited)
+ * - generateDailyBrief: Scheduled brief generation (daily)
+ * - triggerDailyBrief: Manual brief trigger (API key protected)
+ * - getTodayBrief: Get daily brief with articles
+ * - getArticles: Paginated article feed with filters
+ * - backfillEmbeddingsLast30Days: Admin embedding backfill
+ * - runEmbeddingsBackfill: Scheduled embedding backfill
+ * - answerQuestionRag: RAG chat (callable)
+ * - answerQuestionRagStream: RAG chat (SSE streaming)
+ * - deleteAccount: Account + data deletion (App Store 5.1.1(v))
  */
 
 import { onRequest, onCall, HttpsError } from "firebase-functions/v2/https";
@@ -51,16 +71,83 @@ if (getApps().length === 0) {
 
 const db = getFirestore();
 
+// ============================================================================
+// Constants
+// ============================================================================
+
+/** Valid time window values for article queries */
+const VALID_TIME_WINDOWS = ["24h", "7d", "all"] as const;
+type TimeWindow = (typeof VALID_TIME_WINDOWS)[number];
+
+/** Valid category values for article queries */
+const VALID_CATEGORIES = [
+  "all", "property_cat", "casualty_liability", "regulation",
+  "claims", "reinsurance", "insurtech",
+] as const;
+
+/** Date format regex (yyyy-mm-dd) */
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+// ============================================================================
+// Utility Helpers
+// ============================================================================
+
 /**
- * Health check endpoint
- * Returns { ok: true, ts: <ISO timestamp> }
+ * Retry an async operation with exponential backoff.
+ * Used for OpenAI and other external API calls.
  */
-export const apiHealth = onRequest((req, res) => {
-  res.json({
-    ok: true,
-    ts: new Date().toISOString(),
-  });
-});
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  options: { maxRetries?: number; baseDelayMs?: number; label?: string } = {}
+): Promise<T> {
+  const { maxRetries = 2, baseDelayMs = 1000, label = "operation" } = options;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      const isRetryable =
+        error instanceof Error &&
+        (error.message.includes("timeout") ||
+          error.message.includes("429") ||
+          error.message.includes("500") ||
+          error.message.includes("502") ||
+          error.message.includes("503") ||
+          error.message.includes("ECONNRESET") ||
+          error.message.includes("rate_limit"));
+
+      if (attempt < maxRetries && isRetryable) {
+        const delay = baseDelayMs * Math.pow(2, attempt);
+        console.warn(
+          `[withRetry] ${label} attempt ${attempt + 1} failed, retrying in ${delay}ms:`,
+          error instanceof Error ? error.message : "Unknown error"
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error(`${label}: All ${maxRetries + 1} attempts failed`);
+}
+
+/**
+ * Health check endpoint with version info and diagnostics.
+ * Returns { ok, ts, version, region, uptime }
+ */
+export const apiHealth = onRequest(
+  { cors: true },
+  (req, res) => {
+    res.json({
+      ok: true,
+      ts: new Date().toISOString(),
+      version: "1.1.0",
+      region: process.env.FUNCTION_REGION || "us-central1",
+      runtime: `node-${process.version}`,
+    });
+  }
+);
 
 // ============================================================================
 // Admin Functions
@@ -267,14 +354,21 @@ export const adminBackfillLast7Days = onCall(
 
 /**
  * HTTP endpoint to manually trigger ingestion (for testing).
- * Requires admin authentication via query parameter.
+ * Protected by API key. Only GET/POST allowed.
  */
 export const triggerIngestion = onRequest(
   {
     memory: "512MiB",
     timeoutSeconds: 540,
+    cors: true,
   },
   async (req, res) => {
+    // Only allow GET/POST
+    if (req.method !== "GET" && req.method !== "POST") {
+      res.status(405).json({ error: "Method not allowed" });
+      return;
+    }
+
     // Simple API key check for manual triggers
     const apiKey = req.query.key;
     if (apiKey !== process.env.INGESTION_API_KEY && !process.env.FUNCTIONS_EMULATOR) {
@@ -284,18 +378,26 @@ export const triggerIngestion = onRequest(
 
     console.log("[triggerIngestion] Manual ingestion triggered");
 
-    const maxAgeDays = parseInt(req.query.days as string) || 7;
+    const maxAgeDays = Math.max(1, Math.min(parseInt(req.query.days as string) || 7, 30));
 
-    const summary = await ingestAllEnabledSources({ maxAgeDays });
+    try {
+      const summary = await ingestAllEnabledSources({ maxAgeDays });
 
-    res.json({
-      success: true,
-      durationMs: summary.durationMs,
-      sourcesProcessed: summary.sourcesProcessed,
-      totalItemsFetched: summary.totalItemsFetched,
-      totalItemsIngested: summary.totalItemsIngested,
-      results: summary.results,
-    });
+      res.json({
+        success: true,
+        durationMs: summary.durationMs,
+        sourcesProcessed: summary.sourcesProcessed,
+        totalItemsFetched: summary.totalItemsFetched,
+        totalItemsIngested: summary.totalItemsIngested,
+        results: summary.results,
+      });
+    } catch (error) {
+      console.error("[triggerIngestion] Error:", error instanceof Error ? error.message : error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
   }
 );
 
@@ -477,22 +579,26 @@ export const getOrCreateArticleAI = onCall<GetOrCreateArticleAIData>(
 
     let response;
     try {
-      response = await openai.responses.create({
-        model: AI_MODEL,
-        max_output_tokens: 800,
-        input: [
-          { role: "system", content: ARTICLE_SUMMARIZE_SYSTEM },
-          { role: "user", content: prompt },
-        ],
-        text: {
-          format: {
-            type: "json_schema",
-            name: "article_ai",
-            schema: ARTICLE_AI_SCHEMA,
-            strict: true,
-          },
-        },
-      });
+      response = await withRetry(
+        () =>
+          openai.responses.create({
+            model: AI_MODEL,
+            max_output_tokens: 800,
+            input: [
+              { role: "system", content: ARTICLE_SUMMARIZE_SYSTEM },
+              { role: "user", content: prompt },
+            ],
+            text: {
+              format: {
+                type: "json_schema",
+                name: "article_ai",
+                schema: ARTICLE_AI_SCHEMA,
+                strict: true,
+              },
+            },
+          }),
+        { maxRetries: 2, baseDelayMs: 1000, label: "getOrCreateArticleAI/OpenAI" }
+      );
     } catch (openaiError) {
       console.error("[getOrCreateArticleAI] OpenAI API error:", openaiError instanceof Error ? openaiError.message : "Unknown error");
       throw new HttpsError("internal", "AI service is temporarily unavailable. Please try again.");
@@ -562,19 +668,148 @@ function getTodayDateET(): string {
   return formatter.format(now); // returns yyyy-mm-dd
 }
 
+// ============================================================================
+// Shared Brief Generation Logic (DRY)
+// ============================================================================
+
+interface BriefGenerationResult {
+  brief: Brief;
+  metrics: ReturnType<typeof selectArticlesForBrief>["metrics"];
+  articlesUsed: number;
+}
+
 /**
- * Scheduled function to generate daily brief at 6:00 AM ET
+ * Core brief generation logic shared between scheduled and manual triggers.
+ * Extracts common code to avoid duplication.
+ *
+ * @param dateKey - Date key in yyyy-mm-dd format
+ * @returns Brief document and generation metrics
+ * @throws Error if no articles or AI generation fails
+ */
+async function generateBriefForDate(dateKey: string): Promise<BriefGenerationResult> {
+  // Fetch articles from last 36 hours (get more candidates for filtering)
+  const cutoffTime = new Date(Date.now() - 36 * 60 * 60 * 1000);
+  const articlesSnap = await db
+    .collection("articles")
+    .where("isRelevant", "==", true)
+    .where("publishedAt", ">=", Timestamp.fromDate(cutoffTime))
+    .orderBy("publishedAt", "desc")
+    .limit(100)
+    .get();
+
+  if (articlesSnap.empty) {
+    throw new Error(`No relevant articles found for ${dateKey}`);
+  }
+
+  console.log(`[generateBrief] Found ${articlesSnap.size} candidate articles for ${dateKey}`);
+
+  // Apply relevance gate: prioritize by score, ensure diversity
+  const rawArticles = articlesSnap.docs.map((doc) => {
+    const data = doc.data() as Article;
+    return { ...data, id: doc.id };
+  });
+
+  const { articles: selectedArticles, metrics } = selectArticlesForBrief(rawArticles);
+  logSelectionMetrics("generateBrief", metrics);
+
+  if (selectedArticles.length === 0) {
+    throw new Error(`No articles passed relevance gate for ${dateKey}`);
+  }
+
+  // Prepare article data for prompt
+  const articles = selectedArticles.map((a) => ({
+    id: a.id,
+    title: a.title,
+    sourceName: a.sourceName,
+    sourceId: a.sourceId,
+    snippet: a.snippet,
+  }));
+
+  // Build sources used map
+  const sourceMap = new Map<string, string>();
+  articles.forEach((a) => {
+    if (!sourceMap.has(a.sourceId)) {
+      sourceMap.set(a.sourceId, a.sourceName);
+    }
+  });
+
+  // Generate brief using OpenAI (with retry for transient failures)
+  const openai = getOpenAIClient();
+  const prompt = buildDailyBriefPrompt(dateKey, articles);
+
+  console.log("[generateBrief] Calling OpenAI with premium model...");
+
+  const response = await withRetry(
+    () =>
+      openai.responses.create({
+        model: AI_MODEL_PREMIUM,
+        max_output_tokens: 4000,
+        input: [
+          { role: "system", content: DAILY_BRIEF_SYSTEM },
+          { role: "user", content: prompt },
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "daily_brief",
+            schema: DAILY_BRIEF_SCHEMA,
+            strict: true,
+          },
+        },
+      }),
+    { maxRetries: 2, baseDelayMs: 2000, label: "generateBrief/OpenAI" }
+  );
+
+  // Parse structured output
+  const outputText = response.output_text;
+  let briefData: DailyBriefResponse;
+  try {
+    briefData = JSON.parse(outputText) as DailyBriefResponse;
+  } catch (parseError) {
+    const truncatedOutput = outputText?.slice(0, 500) ?? "(empty response)";
+    console.error(
+      "[generateBrief] Failed to parse AI response.",
+      `Parse error: ${parseError instanceof Error ? parseError.message : "unknown"}`,
+      `Raw response (first 500 chars): ${truncatedOutput}`
+    );
+    throw new Error("Failed to parse AI response for daily brief");
+  }
+
+  // Build the brief document
+  const brief: Brief = {
+    date: dateKey,
+    createdAt: Timestamp.now(),
+    executiveSummary: briefData.executiveSummary,
+    topStories: briefData.topStories,
+    sections: briefData.sections,
+    topics: briefData.topics,
+    sourcesUsed: Array.from(sourceMap.entries()).map(([sourceId, name]) => ({
+      sourceId,
+      name,
+    })),
+    sourceArticleIds: articles.map((a) => a.id),
+    model: AI_MODEL_PREMIUM,
+  };
+
+  return { brief, metrics, articlesUsed: articles.length };
+}
+
+/**
+ * Scheduled function to generate daily brief at midnight ET
  *
  * - Fetches articles from last 24-36 hours
  * - Uses OpenAI to synthesize a brief
  * - Stores in briefs/{yyyy-mm-dd}
  * - Safe regeneration: skips if brief already exists
+ * - Sends push notifications on success
  */
 export const generateDailyBrief = onSchedule(
   {
     schedule: "0 0 * * *", // 12:00 AM (midnight) daily
     timeZone: "America/New_York",
     secrets: [openaiApiKey],
+    memory: "512MiB",
+    timeoutSeconds: 300,
   },
   async () => {
     const dateKey = getTodayDateET();
@@ -589,148 +824,66 @@ export const generateDailyBrief = onSchedule(
       return;
     }
 
-    // Fetch articles from last 36 hours (get more candidates for filtering)
-    const cutoffTime = new Date(Date.now() - 36 * 60 * 60 * 1000);
-    const articlesSnap = await db
-      .collection("articles")
-      .where("isRelevant", "==", true)
-      .where("publishedAt", ">=", Timestamp.fromDate(cutoffTime))
-      .orderBy("publishedAt", "desc")
-      .limit(100) // Fetch more to allow relevance gate filtering
-      .get();
+    try {
+      const { brief } = await generateBriefForDate(dateKey);
 
-    if (articlesSnap.empty) {
-      console.log(`[generateDailyBrief] No relevant articles found for ${dateKey}`);
-      return;
-    }
+      // Save to Firestore
+      await briefRef.set(brief);
 
-    console.log(`[generateDailyBrief] Found ${articlesSnap.size} candidate articles`);
-
-    // Apply relevance gate: prioritize by score, ensure diversity
-    const rawArticles = articlesSnap.docs.map((doc) => {
-      const data = doc.data() as Article;
-      return { ...data, id: doc.id };
-    });
-
-    const { articles: selectedArticles, metrics } = selectArticlesForBrief(rawArticles);
-    logSelectionMetrics("generateDailyBrief", metrics);
-
-    if (selectedArticles.length === 0) {
-      console.log(`[generateDailyBrief] No articles passed relevance gate for ${dateKey}`);
-      return;
-    }
-
-    // Prepare article data for prompt
-    const articles = selectedArticles.map((a) => ({
-      id: a.id,
-      title: a.title,
-      sourceName: a.sourceName,
-      sourceId: a.sourceId,
-      snippet: a.snippet,
-    }));
-
-    // Build sources used map
-    const sourceMap = new Map<string, string>();
-    articles.forEach((a) => {
-      if (!sourceMap.has(a.sourceId)) {
-        sourceMap.set(a.sourceId, a.sourceName);
+      // Send push notifications to opted-in users
+      let notificationInfo = "";
+      try {
+        const formattedDate = formatDateForNotification(dateKey);
+        const notificationResult = await sendNotificationToOptedInUsers({
+          title: "Morning Brief",
+          body: `Top P&C updates for ${formattedDate}`,
+          data: {
+            type: "daily_brief",
+            date: dateKey,
+          },
+        });
+        notificationInfo = ` Notifications: ${notificationResult.sent} sent, ${notificationResult.failed} failed.`;
+      } catch (error) {
+        // Don't fail the function if notifications fail
+        console.error("[generateDailyBrief] Notification send error:", error);
+        notificationInfo = " Notifications: failed to send.";
       }
-    });
 
-    // Generate brief using OpenAI
-    const openai = getOpenAIClient();
-    const prompt = buildDailyBriefPrompt(dateKey, articles);
-
-    console.log("[generateDailyBrief] Calling OpenAI with premium model...");
-
-    const response = await openai.responses.create({
-      model: AI_MODEL_PREMIUM,
-      max_output_tokens: 4000,
-      input: [
-        { role: "system", content: DAILY_BRIEF_SYSTEM },
-        { role: "user", content: prompt },
-      ],
-      text: {
-        format: {
-          type: "json_schema",
-          name: "daily_brief",
-          schema: DAILY_BRIEF_SCHEMA,
-          strict: true,
-        },
-      },
-    });
-
-    // Parse structured output
-    const outputText = response.output_text;
-    let briefData: DailyBriefResponse;
-    try {
-      briefData = JSON.parse(outputText) as DailyBriefResponse;
-    } catch (parseError) {
-      const truncatedOutput = outputText?.slice(0, 500) ?? "(empty response)";
-      console.error(
-        "[generateDailyBrief] Failed to parse AI response as DailyBriefResponse JSON.",
-        "Expected: { executiveSummary, topStories, sections, signals, watchlistMentions }.",
-        `Parse error: ${parseError instanceof Error ? parseError.message : "unknown"}`,
-        `Raw response (first 500 chars): ${truncatedOutput}`
+      console.log(
+        `[generateDailyBrief] ✓ SUCCESS for ${dateKey}: ` +
+          `${brief.executiveSummary.length} summary items, ` +
+          `${brief.topStories.length} top stories, ` +
+          `${brief.topics.length} topics.${notificationInfo}`
       );
-      throw new Error("Failed to parse AI response for daily brief");
-    }
-
-    // Build the brief document
-    const brief: Brief = {
-      date: dateKey,
-      createdAt: Timestamp.now(),
-      executiveSummary: briefData.executiveSummary,
-      topStories: briefData.topStories,
-      sections: briefData.sections,
-      topics: briefData.topics,
-      sourcesUsed: Array.from(sourceMap.entries()).map(([sourceId, name]) => ({
-        sourceId,
-        name,
-      })),
-      sourceArticleIds: articles.map((a) => a.id),
-      model: AI_MODEL_PREMIUM,
-    };
-
-    // Save to Firestore
-    await briefRef.set(brief);
-
-    // Send push notifications to opted-in users
-    let notificationInfo = "";
-    try {
-      const formattedDate = formatDateForNotification(dateKey);
-      const notificationResult = await sendNotificationToOptedInUsers({
-        title: "Morning Brief",
-        body: `Top P&C updates for ${formattedDate}`,
-        data: {
-          type: "daily_brief",
-          date: dateKey,
-        },
-      });
-      notificationInfo = ` Notifications: ${notificationResult.sent} sent, ${notificationResult.failed} failed.`;
     } catch (error) {
-      // Don't fail the function if notifications fail
-      console.error("[generateDailyBrief] Notification send error:", error);
-      notificationInfo = " Notifications: failed to send.";
+      console.error(
+        `[generateDailyBrief] ✗ FAILURE for ${dateKey}:`,
+        error instanceof Error ? error.message : error
+      );
+      throw error; // Re-throw so Cloud Functions marks execution as failed
     }
-
-    // Clear success log
-    console.log(
-      `[generateDailyBrief] ✓ SUCCESS for ${dateKey}: ` +
-        `${brief.executiveSummary.length} summary items, ` +
-        `${brief.topStories.length} top stories, ` +
-        `${brief.topics.length} topics.${notificationInfo}`
-    );
   }
 );
 
 /**
- * HTTP trigger to manually generate daily brief (for testing)
+ * HTTP trigger to manually generate daily brief (for testing).
+ * Uses shared generation logic. Protected by API key.
  */
 export const triggerDailyBrief = onRequest(
-  { secrets: [openaiApiKey] },
+  {
+    secrets: [openaiApiKey],
+    memory: "512MiB",
+    timeoutSeconds: 300,
+    cors: true,
+  },
   async (req, res) => {
-    // Protect against unauthorized access (gpt-4o is expensive)
+    // Only allow GET/POST
+    if (req.method !== "GET" && req.method !== "POST") {
+      res.status(405).json({ error: "Method not allowed" });
+      return;
+    }
+
+    // Protect against unauthorized access
     const apiKey = req.query.key;
     if (apiKey !== process.env.INGESTION_API_KEY && !process.env.FUNCTIONS_EMULATOR) {
       res.status(401).json({ error: "Unauthorized" });
@@ -738,6 +891,13 @@ export const triggerDailyBrief = onRequest(
     }
 
     const dateKey = (req.query.date as string) || getTodayDateET();
+
+    // Validate date format
+    if (!DATE_REGEX.test(dateKey)) {
+      res.status(400).json({ error: "Invalid date format. Expected yyyy-mm-dd." });
+      return;
+    }
+
     console.log(`[triggerDailyBrief] Manual trigger for ${dateKey}`);
 
     // Check if brief already exists
@@ -753,135 +913,33 @@ export const triggerDailyBrief = onRequest(
       return;
     }
 
-    // Fetch articles from last 36 hours (get more candidates for filtering)
-    const cutoffTime = new Date(Date.now() - 36 * 60 * 60 * 1000);
-    const articlesSnap = await db
-      .collection("articles")
-      .where("isRelevant", "==", true)
-      .where("publishedAt", ">=", Timestamp.fromDate(cutoffTime))
-      .orderBy("publishedAt", "desc")
-      .limit(100) // Fetch more to allow relevance gate filtering
-      .get();
-
-    if (articlesSnap.empty) {
-      res.json({
-        ok: false,
-        message: `No relevant articles found for ${dateKey}`,
-        date: dateKey,
-      });
-      return;
-    }
-
-    console.log(`[triggerDailyBrief] Found ${articlesSnap.size} candidate articles`);
-
-    // Apply relevance gate: prioritize by score, ensure diversity
-    const rawArticles = articlesSnap.docs.map((doc) => {
-      const data = doc.data() as Article;
-      return { ...data, id: doc.id };
-    });
-
-    const { articles: selectedArticles, metrics } = selectArticlesForBrief(rawArticles);
-    logSelectionMetrics("triggerDailyBrief", metrics);
-
-    if (selectedArticles.length === 0) {
-      res.json({
-        ok: false,
-        message: `No articles passed relevance gate for ${dateKey}`,
-        date: dateKey,
-        metrics,
-      });
-      return;
-    }
-
-    // Prepare article data for prompt
-    const articles = selectedArticles.map((a) => ({
-      id: a.id,
-      title: a.title,
-      sourceName: a.sourceName,
-      sourceId: a.sourceId,
-      snippet: a.snippet,
-    }));
-
-    // Build sources used map
-    const sourceMap = new Map<string, string>();
-    articles.forEach((a) => {
-      if (!sourceMap.has(a.sourceId)) {
-        sourceMap.set(a.sourceId, a.sourceName);
-      }
-    });
-
-    // Generate brief using OpenAI with premium model
-    const openai = getOpenAIClient();
-    const prompt = buildDailyBriefPrompt(dateKey, articles);
-
-    const response = await openai.responses.create({
-      model: AI_MODEL_PREMIUM,
-      max_output_tokens: 4000,
-      input: [
-        { role: "system", content: DAILY_BRIEF_SYSTEM },
-        { role: "user", content: prompt },
-      ],
-      text: {
-        format: {
-          type: "json_schema",
-          name: "daily_brief",
-          schema: DAILY_BRIEF_SCHEMA,
-          strict: true,
-        },
-      },
-    });
-
-    // Parse structured output
-    const outputText = response.output_text;
-    let briefData: DailyBriefResponse;
     try {
-      briefData = JSON.parse(outputText) as DailyBriefResponse;
-    } catch (parseError) {
-      const truncatedOutput = outputText?.slice(0, 500) ?? "(empty response)";
-      console.error(
-        "[triggerDailyBrief] Failed to parse AI response as DailyBriefResponse JSON.",
-        `Parse error: ${parseError instanceof Error ? parseError.message : "unknown"}`,
-        `Raw response (first 500 chars): ${truncatedOutput}`
-      );
+      const { brief, metrics } = await generateBriefForDate(dateKey);
+
+      // Save to Firestore
+      await briefRef.set(brief);
+
+      res.json({
+        ok: true,
+        message: `Brief created for ${dateKey}`,
+        date: dateKey,
+        stats: {
+          summaryItems: brief.executiveSummary.length,
+          topStories: brief.topStories.length,
+          topics: brief.topics.length,
+          articlesUsed: brief.sourceArticleIds.length,
+        },
+        selectionMetrics: metrics,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      console.error(`[triggerDailyBrief] ✗ FAILURE for ${dateKey}:`, message);
       res.status(500).json({
         ok: false,
-        message: "Failed to parse AI response as valid JSON",
+        message,
         date: dateKey,
       });
-      return;
     }
-
-    // Build the brief document
-    const brief: Brief = {
-      date: dateKey,
-      createdAt: Timestamp.now(),
-      executiveSummary: briefData.executiveSummary,
-      topStories: briefData.topStories,
-      sections: briefData.sections,
-      topics: briefData.topics,
-      sourcesUsed: Array.from(sourceMap.entries()).map(([sourceId, name]) => ({
-        sourceId,
-        name,
-      })),
-      sourceArticleIds: articles.map((a) => a.id),
-      model: AI_MODEL_PREMIUM,
-    };
-
-    // Save to Firestore
-    await briefRef.set(brief);
-
-    res.json({
-      ok: true,
-      message: `Brief created for ${dateKey}`,
-      date: dateKey,
-      stats: {
-        summaryItems: brief.executiveSummary.length,
-        topStories: brief.topStories.length,
-        topics: brief.topics.length,
-        articlesUsed: brief.sourceArticleIds.length,
-      },
-      selectionMetrics: metrics,
-    });
   }
 );
 
@@ -890,74 +948,99 @@ interface GetTodayBriefData {
 }
 
 /**
- * Callable function to get today's brief with article cards
+ * Callable function to get today's brief with article cards.
+ * Uses batch fetch (getAll) for top story articles for efficiency.
  *
  * @param date - Optional date in yyyy-mm-dd format (defaults to today ET)
  * @returns Brief with topStories populated with full article data
  */
-export const getTodayBrief = onCall<GetTodayBriefData>(async (request) => {
-  const { date } = request.data || {};
+export const getTodayBrief = onCall<GetTodayBriefData>(
+  {
+    memory: "256MiB",
+    timeoutSeconds: 30,
+  },
+  async (request) => {
+    const { date } = request.data || {};
 
-  // Get date key (default to today in ET)
-  const dateKey = date || getTodayDateET();
+    // Get date key (default to today in ET)
+    const dateKey = date || getTodayDateET();
 
-  console.log(`[getTodayBrief] Fetching brief for ${dateKey}`);
+    // Validate date format (if provided)
+    if (date && !DATE_REGEX.test(date)) {
+      throw new HttpsError(
+        "invalid-argument",
+        "date must be in yyyy-mm-dd format."
+      );
+    }
 
-  // Fetch brief
-  const briefDoc = await db.collection("briefs").doc(dateKey).get();
+    console.log(`[getTodayBrief] Fetching brief for ${dateKey}`);
 
-  if (!briefDoc.exists) {
-    return {
-      found: false,
-      date: dateKey,
-      brief: null,
-      topStoriesWithArticles: [],
-    };
-  }
+    // Fetch brief
+    const briefDoc = await db.collection("briefs").doc(dateKey).get();
 
-  const brief = briefDoc.data() as Brief;
-
-  // Fetch full article data for top stories
-  const topStoryIds = brief.topStories.map((s) => s.articleId);
-  const articleDocs = await Promise.all(
-    topStoryIds.map((id) => db.collection("articles").doc(id).get())
-  );
-
-  const topStoriesWithArticles = brief.topStories.map((story, index) => {
-    const articleDoc = articleDocs[index];
-    if (!articleDoc.exists) {
+    if (!briefDoc.exists) {
       return {
-        ...story,
-        article: null,
+        found: false,
+        date: dateKey,
+        brief: null,
+        topStoriesWithArticles: [],
       };
     }
 
-    const article = articleDoc.data() as Article;
-    return {
-      ...story,
-      article: {
-        id: articleDoc.id,
-        title: article.title,
-        url: article.url,
-        sourceName: article.sourceName,
-        sourceId: article.sourceId,
-        publishedAt: article.publishedAt?.toDate?.()?.toISOString() ?? null,
-        snippet: article.snippet,
-        imageUrl: article.imageUrl || null,
-      },
-    };
-  });
+    const brief = briefDoc.data() as Brief;
 
-  return {
-    found: true,
-    date: dateKey,
-    brief: {
-      ...brief,
-      createdAt: brief.createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
-    },
-    topStoriesWithArticles,
-  };
-});
+    // Batch fetch all top story articles using getAll (single round-trip)
+    const topStoryIds = brief.topStories.map((s) => s.articleId);
+    const articleRefs = topStoryIds.map((id) =>
+      db.collection("articles").doc(id)
+    );
+
+    // Use getAll for efficient batch fetch (single Firestore call)
+    const articleDocs =
+      articleRefs.length > 0 ? await db.getAll(...articleRefs) : [];
+
+    // Build ID → doc map for fast lookup
+    const articleMap = new Map(
+      articleDocs
+        .filter((doc) => doc.exists)
+        .map((doc) => [doc.id, doc.data() as Article])
+    );
+
+    const topStoriesWithArticles = brief.topStories.map((story) => {
+      const article = articleMap.get(story.articleId);
+      if (!article) {
+        return { ...story, article: null };
+      }
+
+      return {
+        ...story,
+        article: {
+          id: story.articleId,
+          title: article.title,
+          url: article.url,
+          sourceName: article.sourceName,
+          sourceId: article.sourceId,
+          publishedAt:
+            article.publishedAt?.toDate?.()?.toISOString() ?? null,
+          snippet: article.snippet,
+          imageUrl: article.imageUrl || null,
+        },
+      };
+    });
+
+    return {
+      found: true,
+      date: dateKey,
+      brief: {
+        ...brief,
+        createdAt:
+          brief.createdAt?.toDate?.()?.toISOString() ??
+          new Date().toISOString(),
+      },
+      topStoriesWithArticles,
+    };
+  }
+);
 
 // ============================================================================
 // Articles API
@@ -965,95 +1048,166 @@ export const getTodayBrief = onCall<GetTodayBriefData>(async (request) => {
 
 interface GetArticlesData {
   category?: string;
-  timeWindow?: "24h" | "7d" | "all";
+  timeWindow?: string;
   sourceIds?: string[];
   limit?: number;
   startAfterPublishedAt?: string; // ISO date string for pagination
 }
 
 /**
- * Callable function to get articles with filters
- * Used by mobile app where direct Firestore queries hang
+ * Callable function to get articles with filters.
+ * Used by mobile app where direct Firestore queries hang.
+ *
+ * Validates all inputs. Supports pagination via startAfterPublishedAt.
+ *
+ * @param category - "all" or a valid SourceCategory
+ * @param timeWindow - "24h", "7d", or "all" (default: "7d")
+ * @param sourceIds - Up to 10 source IDs to filter by
+ * @param limit - Max articles to return (1-50, default: 20)
+ * @param startAfterPublishedAt - ISO date string for cursor pagination
  */
-export const getArticles = onCall<GetArticlesData>(async (request) => {
-  const {
-    category,
-    timeWindow = "7d",
-    sourceIds,
-    limit: requestLimit = 20,
-    startAfterPublishedAt
-  } = request.data || {};
+export const getArticles = onCall<GetArticlesData>(
+  {
+    memory: "256MiB",
+    timeoutSeconds: 30,
+  },
+  async (request) => {
+    const {
+      category,
+      timeWindow = "7d",
+      sourceIds,
+      limit: requestLimit = 20,
+      startAfterPublishedAt,
+    } = request.data || {};
 
-  console.log("[getArticles] Fetching articles", { category, timeWindow, sourceIds, limit: requestLimit });
-
-  // Build query
-  let query = db.collection("articles").orderBy("publishedAt", "desc");
-
-  // Time window filter
-  if (timeWindow !== "all") {
-    const now = new Date();
-    const cutoff = timeWindow === "24h"
-      ? new Date(now.getTime() - 24 * 60 * 60 * 1000)
-      : new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    query = query.where("publishedAt", ">=", Timestamp.fromDate(cutoff));
-  }
-
-  // Category filter
-  if (category && category !== "all") {
-    query = query.where("categories", "array-contains", category);
-  }
-
-  // Source filter (max 10 for Firestore 'in' query)
-  if (sourceIds && sourceIds.length > 0 && sourceIds.length <= 10) {
-    const validSourceIds = sourceIds.filter((id) => typeof id === "string" && id.trim() !== "");
-    if (validSourceIds.length > 0) {
-      query = query.where("sourceId", "in", validSourceIds);
+    // Validate timeWindow
+    if (!VALID_TIME_WINDOWS.includes(timeWindow as TimeWindow)) {
+      throw new HttpsError(
+        "invalid-argument",
+        `timeWindow must be one of: ${VALID_TIME_WINDOWS.join(", ")}. Received: "${timeWindow}"`
+      );
     }
-  }
 
-  // Pagination
-  if (startAfterPublishedAt) {
-    const startAfterDate = new Date(startAfterPublishedAt);
-    if (isNaN(startAfterDate.getTime())) {
-      throw new HttpsError("invalid-argument", "startAfterPublishedAt must be a valid ISO date string.");
+    // Validate category (if provided and not "all")
+    if (category && category !== "all" && !VALID_CATEGORIES.includes(category as (typeof VALID_CATEGORIES)[number])) {
+      throw new HttpsError(
+        "invalid-argument",
+        `category must be one of: ${VALID_CATEGORIES.join(", ")}. Received: "${category}"`
+      );
     }
-    query = query.startAfter(Timestamp.fromDate(startAfterDate));
-  }
 
-  // Limit
-  const safeLimit = Math.min(requestLimit, 50);
-  query = query.limit(safeLimit);
+    // Validate limit
+    if (typeof requestLimit !== "number" || requestLimit < 1) {
+      throw new HttpsError(
+        "invalid-argument",
+        "limit must be a positive number."
+      );
+    }
 
-  const snapshot = await query.get();
+    // Validate sourceIds
+    if (sourceIds) {
+      if (!Array.isArray(sourceIds)) {
+        throw new HttpsError(
+          "invalid-argument",
+          "sourceIds must be an array."
+        );
+      }
+      if (sourceIds.length > 10) {
+        throw new HttpsError(
+          "invalid-argument",
+          "sourceIds must contain at most 10 items (Firestore 'in' limit)."
+        );
+      }
+    }
 
-  const articles = snapshot.docs.map((doc) => {
-    const data = doc.data() as Article;
+    // Validate pagination cursor
+    if (startAfterPublishedAt) {
+      const startAfterDate = new Date(startAfterPublishedAt);
+      if (isNaN(startAfterDate.getTime())) {
+        throw new HttpsError(
+          "invalid-argument",
+          "startAfterPublishedAt must be a valid ISO date string."
+        );
+      }
+    }
+
+    console.log("[getArticles] Fetching articles", {
+      category,
+      timeWindow,
+      sourceCount: sourceIds?.length ?? "all",
+      limit: requestLimit,
+      hasCursor: !!startAfterPublishedAt,
+    });
+
+    // Build query
+    let query = db.collection("articles").orderBy("publishedAt", "desc");
+
+    // Time window filter
+    if (timeWindow !== "all") {
+      const now = new Date();
+      const cutoff =
+        timeWindow === "24h"
+          ? new Date(now.getTime() - 24 * 60 * 60 * 1000)
+          : new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      query = query.where("publishedAt", ">=", Timestamp.fromDate(cutoff));
+    }
+
+    // Category filter
+    if (category && category !== "all") {
+      query = query.where("categories", "array-contains", category);
+    }
+
+    // Source filter (max 10 for Firestore 'in' query)
+    if (sourceIds && sourceIds.length > 0) {
+      const validSourceIds = sourceIds.filter(
+        (id) => typeof id === "string" && id.trim() !== ""
+      );
+      if (validSourceIds.length > 0) {
+        query = query.where("sourceId", "in", validSourceIds);
+      }
+    }
+
+    // Pagination
+    if (startAfterPublishedAt) {
+      const startAfterDate = new Date(startAfterPublishedAt);
+      query = query.startAfter(Timestamp.fromDate(startAfterDate));
+    }
+
+    // Limit (clamped 1-50)
+    const safeLimit = Math.max(1, Math.min(requestLimit, 50));
+    query = query.limit(safeLimit);
+
+    const snapshot = await query.get();
+
+    const articles = snapshot.docs.map((doc) => {
+      const data = doc.data() as Article;
+      return {
+        id: doc.id,
+        sourceId: data.sourceId,
+        sourceName: data.sourceName,
+        title: data.title,
+        snippet: data.snippet,
+        url: data.url,
+        canonicalUrl: data.canonicalUrl,
+        guid: data.guid,
+        imageUrl: data.imageUrl || null,
+        categories: data.categories || [],
+        publishedAt: data.publishedAt?.toDate?.()?.toISOString() || null,
+        ingestedAt: data.ingestedAt?.toDate?.()?.toISOString() || null,
+        relevanceScore: data.relevanceScore,
+        isRelevant: data.isRelevant,
+        ai: data.ai || null,
+      };
+    });
+
+    console.log(`[getArticles] Returning ${articles.length} articles`);
+
     return {
-      id: doc.id,
-      sourceId: data.sourceId,
-      sourceName: data.sourceName,
-      title: data.title,
-      snippet: data.snippet,
-      url: data.url,
-      canonicalUrl: data.canonicalUrl,
-      guid: data.guid,
-      imageUrl: data.imageUrl || null,
-      categories: data.categories || [],
-      publishedAt: data.publishedAt?.toDate?.()?.toISOString() || null,
-      ingestedAt: data.ingestedAt?.toDate?.()?.toISOString() || null,
-      relevanceScore: data.relevanceScore,
-      isRelevant: data.isRelevant,
-      ai: data.ai || null,
+      articles,
+      hasMore: articles.length === safeLimit,
     };
-  });
-
-  console.log(`[getArticles] Returning ${articles.length} articles`);
-
-  return {
-    articles,
-    hasMore: articles.length === safeLimit,
-  };
-});
+  }
+);
 
 // ============================================================================
 // Embeddings Functions
@@ -1286,6 +1440,7 @@ export const answerQuestionRag = onCall<AnswerQuestionRagData>(
     secrets: [openaiApiKey],
     memory: "512MiB",
     timeoutSeconds: 120,
+    concurrency: 20,
   },
   async (request) => {
     // Allow guest access for Capacitor WebView (where Firebase Auth SDK hangs)
@@ -1437,7 +1592,8 @@ export const answerQuestionRagStream = onRequest(
     secrets: [openaiApiKey],
     memory: "512MiB",
     timeoutSeconds: 120,
-    cors: true, // Enable CORS with default settings
+    cors: true,
+    concurrency: 20,
   },
   async (req, res) => {
     // Handle CORS preflight
@@ -1449,6 +1605,13 @@ export const answerQuestionRagStream = onRequest(
     // Only allow POST
     if (req.method !== "POST") {
       res.status(405).json({ error: "Method not allowed" });
+      return;
+    }
+
+    // Validate Content-Type
+    const contentType = req.headers["content-type"];
+    if (!contentType?.includes("application/json")) {
+      res.status(415).json({ error: "Content-Type must be application/json" });
       return;
     }
 
@@ -1611,7 +1774,7 @@ export const answerQuestionRagStream = onRequest(
  *
  * This callable function:
  * 1. Requires authentication
- * 2. Deletes all user-owned Firestore data:
+ * 2. Deletes all user-owned Firestore data using batched writes:
  *    - users/{uid}/prefs/*
  *    - users/{uid}/bookmarks/*
  *    - users/{uid}/pushTokens/*
@@ -1621,11 +1784,12 @@ export const answerQuestionRagStream = onRequest(
  * 3. Deletes the user from Firebase Auth
  *
  * Deletion is idempotent — safe to retry on partial failure.
+ * Uses batched writes for efficient bulk deletion (up to 500 per batch).
  */
 export const deleteAccount = onCall(
   {
-    memory: "256MiB",
-    timeoutSeconds: 60,
+    memory: "512MiB",
+    timeoutSeconds: 120,
   },
   async (request) => {
     // Require authentication
@@ -1642,33 +1806,51 @@ export const deleteAccount = onCall(
     const deletionResults: Record<string, { deleted: number; errors: number }> = {};
 
     /**
-     * Helper: delete all documents in a collection (with optional subcollections)
+     * Helper: batch-delete all documents in a collection (with optional subcollections).
+     * Uses Firestore batched writes for efficiency (up to 500 ops per batch).
      */
-    async function deleteCollection(
+    async function deleteCollectionBatched(
       collectionPath: string,
       subcollections?: string[]
     ): Promise<{ deleted: number; errors: number }> {
       let deleted = 0;
       let errors = 0;
+      const BATCH_SIZE = 400; // Leave room for subcollection ops in same batch
 
       const snapshot = await db.collection(collectionPath).get();
 
-      for (const doc of snapshot.docs) {
-        try {
-          // Delete subcollections first
-          if (subcollections) {
-            for (const sub of subcollections) {
-              const subPath = `${collectionPath}/${doc.id}/${sub}`;
-              const subResult = await deleteCollection(subPath);
-              deleted += subResult.deleted;
-              errors += subResult.errors;
-            }
+      if (snapshot.empty) {
+        return { deleted: 0, errors: 0 };
+      }
+
+      // If there are subcollections, delete them first (recursively)
+      if (subcollections) {
+        for (const doc of snapshot.docs) {
+          for (const sub of subcollections) {
+            const subPath = `${collectionPath}/${doc.id}/${sub}`;
+            const subResult = await deleteCollectionBatched(subPath);
+            deleted += subResult.deleted;
+            errors += subResult.errors;
           }
-          await doc.ref.delete();
-          deleted++;
+        }
+      }
+
+      // Batch delete the collection documents
+      const docs = snapshot.docs;
+      for (let i = 0; i < docs.length; i += BATCH_SIZE) {
+        const batch = db.batch();
+        const chunk = docs.slice(i, i + BATCH_SIZE);
+
+        for (const doc of chunk) {
+          batch.delete(doc.ref);
+        }
+
+        try {
+          await batch.commit();
+          deleted += chunk.length;
         } catch (error) {
-          errors++;
-          console.error(`[deleteAccount] Error deleting ${collectionPath}/${doc.id}:`, error);
+          errors += chunk.length;
+          console.error(`[deleteAccount] Batch delete error for ${collectionPath}:`, error);
         }
       }
 
@@ -1676,30 +1858,23 @@ export const deleteAccount = onCall(
     }
 
     try {
-      // 1. Delete user preferences
-      const prefsResult = await deleteCollection(`users/${uid}/prefs`);
+      // Delete all user subcollections in parallel for speed
+      const [prefsResult, bookmarksResult, pushTokensResult, chatThreadsResult, rateLimitsResult] =
+        await Promise.all([
+          deleteCollectionBatched(`users/${uid}/prefs`),
+          deleteCollectionBatched(`users/${uid}/bookmarks`),
+          deleteCollectionBatched(`users/${uid}/pushTokens`),
+          deleteCollectionBatched(`users/${uid}/chatThreads`, ["messages"]),
+          deleteCollectionBatched(`users/${uid}/rateLimits`),
+        ]);
+
       deletionResults["prefs"] = prefsResult;
-
-      // 2. Delete bookmarks
-      const bookmarksResult = await deleteCollection(`users/${uid}/bookmarks`);
       deletionResults["bookmarks"] = bookmarksResult;
-
-      // 3. Delete push tokens
-      const pushTokensResult = await deleteCollection(`users/${uid}/pushTokens`);
       deletionResults["pushTokens"] = pushTokensResult;
-
-      // 4. Delete chat threads (and their messages subcollection)
-      const chatThreadsResult = await deleteCollection(
-        `users/${uid}/chatThreads`,
-        ["messages"]
-      );
       deletionResults["chatThreads"] = chatThreadsResult;
-
-      // 5. Delete rate limits
-      const rateLimitsResult = await deleteCollection(`users/${uid}/rateLimits`);
       deletionResults["rateLimits"] = rateLimitsResult;
 
-      // 6. Delete user profile document
+      // Delete user profile document
       try {
         const userDocRef = db.collection("users").doc(uid);
         const userDoc = await userDocRef.get();
@@ -1714,12 +1889,11 @@ export const deleteAccount = onCall(
         console.error("[deleteAccount] Error deleting user profile:", error);
       }
 
-      // 7. Delete user from Firebase Auth
+      // Delete user from Firebase Auth
       try {
         await getAuth().deleteUser(uid);
         deletionResults["authUser"] = { deleted: 1, errors: 0 };
       } catch (error) {
-        // User may already be deleted from Auth
         const authError = error as { code?: string };
         if (authError.code === "auth/user-not-found") {
           deletionResults["authUser"] = { deleted: 0, errors: 0 };
@@ -1735,8 +1909,14 @@ export const deleteAccount = onCall(
       }
 
       // Summarize results
-      const totalDeleted = Object.values(deletionResults).reduce((sum, r) => sum + r.deleted, 0);
-      const totalErrors = Object.values(deletionResults).reduce((sum, r) => sum + r.errors, 0);
+      const totalDeleted = Object.values(deletionResults).reduce(
+        (sum, r) => sum + r.deleted,
+        0
+      );
+      const totalErrors = Object.values(deletionResults).reduce(
+        (sum, r) => sum + r.errors,
+        0
+      );
 
       console.log(`[deleteAccount] ✓ Completed for ${uid}:`, {
         totalDeleted,
@@ -1752,7 +1932,6 @@ export const deleteAccount = onCall(
         details: deletionResults,
       };
     } catch (error) {
-      // If it's already an HttpsError, re-throw
       if (error instanceof HttpsError) {
         throw error;
       }
