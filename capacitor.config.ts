@@ -35,8 +35,8 @@ const config: CapacitorConfig = {
     FirebaseAuthentication: {
       // Use native Firebase Auth SDK for native platforms
       skipNativeAuth: false,
-      // Auth providers - Apple, phone, and Google
-      providers: ['apple.com', 'phone', 'google.com'],
+      // Auth providers - Apple and Google
+      providers: ['apple.com', 'google.com'],
     },
   },
 };

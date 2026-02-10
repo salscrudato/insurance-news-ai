@@ -89,12 +89,11 @@ export function PrivacyPage() {
           <Section title="2. What We Collect">
             <p>
               <strong className="text-[var(--color-text-primary)]">Account identifiers.</strong>{" "}
-              When you use the App, Firebase Authentication creates an anonymous user ID. If you sign in with Apple, Google, or Phone, we store the minimal identity data provided by that service:
+              When you use the App, Firebase Authentication creates an anonymous user ID. If you sign in with Apple or Google, we store the minimal identity data provided by that service:
             </p>
             <ul className="list-disc pl-[20px] space-y-[4px] mt-[4px]">
               <li><strong className="text-[var(--color-text-primary)]">Apple Sign-In:</strong> Your name and email address. Apple may provide a private relay email address if you choose "Hide My Email," and we respect that choice. We do not receive your Apple ID password.</li>
               <li><strong className="text-[var(--color-text-primary)]">Google Sign-In:</strong> Your name and email address from your Google account.</li>
-              <li><strong className="text-[var(--color-text-primary)]">Phone Sign-In:</strong> Your phone number for verification only.</li>
             </ul>
             <p>
               <strong className="text-[var(--color-text-primary)]">Preferences &amp; bookmarks.</strong>{" "}
