@@ -15,7 +15,13 @@ import {
   getFirestore,
   type Firestore,
 } from "firebase/firestore"
-import { getAuth, connectAuthEmulator } from "firebase/auth"
+import {
+  getAuth,
+  initializeAuth,
+  indexedDBLocalPersistence,
+  connectAuthEmulator,
+} from "firebase/auth"
+import { Capacitor } from "@capacitor/core"
 
 // Firebase configuration
 // These are public keys - safe to expose in client code
@@ -49,7 +55,22 @@ try {
 }
 
 // Get Auth instance
-const auth = getAuth(app)
+// On native (Capacitor), use indexedDBLocalPersistence so that
+// signInWithCredential-synced sessions survive app restarts.
+// On web, getAuth() uses the default browser persistence.
+let auth: ReturnType<typeof getAuth>
+if (Capacitor.isNativePlatform()) {
+  try {
+    auth = initializeAuth(app, {
+      persistence: indexedDBLocalPersistence,
+    })
+  } catch {
+    // Auth may already be initialized (hot reload), use existing instance
+    auth = getAuth(app)
+  }
+} else {
+  auth = getAuth(app)
+}
 
 // Connect to emulators in development
 if (import.meta.env.DEV && import.meta.env.VITE_FIREBASE_USE_EMULATOR === "true") {

@@ -6,7 +6,7 @@
  */
 
 import { useState } from "react"
-import { useNavigate, Link } from "react-router-dom"
+import { Link } from "react-router-dom"
 import { Loader2 } from "lucide-react"
 import { AppLogo } from "@/components/ui/app-logo"
 import { useAuth } from "@/lib/auth-context"
@@ -15,11 +15,15 @@ import { useAuth } from "@/lib/auth-context"
 // Auth Page
 // ---------------------------------------------------------------------------
 export function AuthPage() {
-  const navigate = useNavigate()
   const { signInWithGoogle, signInWithApple, continueAsGuest } = useAuth()
 
   const [isLoading, setIsLoading] = useState<"apple" | "google" | "guest" | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  // Navigation after sign-in is handled by the AuthRoute wrapper in App.tsx.
+  // When isAuthenticated becomes true, AuthRoute renders <Navigate to="/" />.
+  // This avoids race conditions on native iOS where the auth state listener
+  // fires after the sign-in promise resolves.
 
   // ---------------------------------------------------------------------------
   // Apple
@@ -30,7 +34,7 @@ export function AuthPage() {
 
     try {
       await signInWithApple()
-      navigate("/", { replace: true })
+      // Don't navigate — AuthRoute wrapper redirects when auth state updates
     } catch (err) {
       console.error("Apple sign-in failed:", err)
       setError("Apple sign-in failed. Please try again.")
@@ -48,7 +52,7 @@ export function AuthPage() {
 
     try {
       await signInWithGoogle()
-      navigate("/", { replace: true })
+      // Don't navigate — AuthRoute wrapper redirects when auth state updates
     } catch (err) {
       console.error("Google sign-in failed:", err)
       setError("Google sign-in failed. Please try again.")
@@ -66,7 +70,7 @@ export function AuthPage() {
 
     try {
       await continueAsGuest()
-      navigate("/", { replace: true })
+      // Don't navigate — AuthRoute wrapper redirects when auth state updates
     } catch (err) {
       console.error("[AuthPage] handleContinueAsGuest failed:", err)
       setError(err instanceof Error ? err.message : "Failed to continue as guest. Please try again.")
@@ -159,8 +163,8 @@ export function AuthPage() {
         <div className="flex-[0.6]" />
 
         {/* Disclaimer */}
-        <p className="max-w-[240px] text-center text-[12px] leading-[1.45] tracking-[-0.08px] text-[var(--color-text-quaternary)]">
-          Sign in to sync preferences and unlock AI features
+        <p className="max-w-[280px] text-center text-[12px] leading-[1.45] tracking-[-0.08px] text-[var(--color-text-quaternary)]">
+          By continuing, you agree to our Terms of Service and Privacy Policy. AI features use OpenAI to process queries.
         </p>
 
         {/* Terms & Privacy */}

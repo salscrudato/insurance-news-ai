@@ -18,6 +18,7 @@ import {
   SquarePen,
   Clock,
   Trash2,
+  Shield,
 } from "lucide-react"
 import { toast } from "sonner"
 import { useMutation, useQuery } from "@tanstack/react-query"
@@ -65,6 +66,27 @@ async function ensureAuthToken(): Promise<string | null> {
 // ============================================================================
 // Session Storage
 // ============================================================================
+
+/** localStorage key for AI data consent */
+const AI_CONSENT_KEY = "pcbrief_ai_consent"
+
+/** Check if user has accepted AI data consent */
+function hasAiConsent(): boolean {
+  try {
+    return localStorage.getItem(AI_CONSENT_KEY) === "accepted"
+  } catch {
+    return false
+  }
+}
+
+/** Record AI data consent acceptance */
+function acceptAiConsent() {
+  try {
+    localStorage.setItem(AI_CONSENT_KEY, "accepted")
+  } catch {
+    // ignore quota errors
+  }
+}
 
 /** localStorage key for the session index (list of session metadata) */
 const SESSIONS_INDEX_KEY = "pcbrief_chat_sessions"
@@ -235,6 +257,10 @@ type SourceFilterMode = "my-sources" | "all-sources"
 export function AskPage() {
   const { isAuthenticated } = useAuth()
   const { data: userPrefs } = useUserPreferences()
+
+  // AI data consent
+  const [showConsentDialog, setShowConsentDialog] = useState(false)
+  const [consentAccepted, setConsentAccepted] = useState(() => hasAiConsent())
 
   // Session management
   const [sessions, setSessions] = useState<ChatSession[]>([])
@@ -594,6 +620,12 @@ export function AskPage() {
         return
       }
 
+      // Show AI data consent dialog if not yet accepted
+      if (!consentAccepted) {
+        setShowConsentDialog(true)
+        return
+      }
+
       // ── Ensure we have an active session ──
       let currentSessionId = activeSessionId
       if (!currentSessionId) {
@@ -717,6 +749,7 @@ export function AskPage() {
       fallbackToNonStreaming,
       scope,
       sourceFilterMode,
+      consentAccepted,
     ]
   )
 
@@ -735,6 +768,18 @@ export function AskPage() {
       handleSend(pendingRetry)
     }
   }, [pendingRetry, handleSend])
+
+  // Handle AI data consent acceptance
+  const handleConsentAccept = useCallback(() => {
+    acceptAiConsent()
+    setConsentAccepted(true)
+    setShowConsentDialog(false)
+    // Auto-send the pending message after consent
+    setTimeout(() => {
+      const pending = inputValue.trim()
+      if (pending) handleSend()
+    }, 100)
+  }, [inputValue, handleSend])
 
   // Handle citation click - open article detail sheet
   const handleCitationClick = useCallback((citation: RagCitation) => {
@@ -963,6 +1008,14 @@ export function AskPage() {
         </p>
       </div>
 
+      {/* AI Data Consent Dialog */}
+      {showConsentDialog && (
+        <AiConsentDialog
+          onAccept={handleConsentAccept}
+          onCancel={() => setShowConsentDialog(false)}
+        />
+      )}
+
       {/* Article Detail Sheet */}
       <ArticleDetailSheet
         article={selectedArticle ?? null}
@@ -1010,6 +1063,118 @@ function EmptyState() {
       <p className="text-[15px] text-[var(--color-text-tertiary)] text-center leading-[1.5] max-w-[260px]">
         Get answers grounded in your curated P&C news sources
       </p>
+    </div>
+  )
+}
+
+// ============================================================================
+// AI Data Consent Dialog
+// ============================================================================
+
+function AiConsentDialog({
+  onAccept,
+  onCancel,
+}: {
+  onAccept: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
+        onClick={onCancel}
+      />
+
+      {/* Dialog */}
+      <div
+        className={cn(
+          "relative w-full sm:max-w-[380px] mx-auto",
+          "bg-[var(--color-surface)] rounded-t-[20px] sm:rounded-[20px]",
+          "shadow-[0_-4px_32px_rgba(0,0,0,0.12)]",
+          "animate-in slide-in-from-bottom duration-300",
+          "pb-[max(20px,env(safe-area-inset-bottom))]",
+        )}
+      >
+        <div className="px-[24px] pt-[28px]">
+          {/* Icon */}
+          <div className="flex justify-center mb-[16px]">
+            <div className="flex items-center justify-center h-[48px] w-[48px] rounded-full bg-[var(--color-accent-soft)]">
+              <Shield className="h-[22px] w-[22px] text-[var(--color-accent)]" strokeWidth={1.8} />
+            </div>
+          </div>
+
+          {/* Title */}
+          <h2 className="text-[20px] font-bold tracking-[-0.4px] text-[var(--color-text-primary)] text-center mb-[8px]">
+            Before You Ask
+          </h2>
+
+          {/* Description */}
+          <p className="text-[15px] leading-[1.55] text-[var(--color-text-secondary)] text-center mb-[20px] tracking-[-0.1px]">
+            Ask The Brief uses AI to answer your questions. Here's how your data is handled:
+          </p>
+
+          {/* Data disclosure items */}
+          <div className="space-y-[14px] mb-[24px]">
+            <div className="flex gap-[12px]">
+              <span className="text-[14px] leading-[1.1] mt-[3px] shrink-0">💬</span>
+              <div>
+                <p className="text-[14px] font-semibold text-[var(--color-text-primary)] leading-[1.35] tracking-[-0.1px]">
+                  What is sent
+                </p>
+                <p className="text-[13px] text-[var(--color-text-tertiary)] leading-[1.45] mt-[2px]">
+                  Your question, recent chat messages, and relevant article excerpts from your news sources.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-[12px]">
+              <span className="text-[14px] leading-[1.1] mt-[3px] shrink-0">🔒</span>
+              <div>
+                <p className="text-[14px] font-semibold text-[var(--color-text-primary)] leading-[1.35] tracking-[-0.1px]">
+                  Who processes it
+                </p>
+                <p className="text-[13px] text-[var(--color-text-tertiary)] leading-[1.45] mt-[2px]">
+                  Your data is sent to OpenAI to generate answers. OpenAI does not use your data to train its models.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-[12px]">
+              <span className="text-[14px] leading-[1.1] mt-[3px] shrink-0">🚫</span>
+              <div>
+                <p className="text-[14px] font-semibold text-[var(--color-text-primary)] leading-[1.35] tracking-[-0.1px]">
+                  What is not sent
+                </p>
+                <p className="text-[13px] text-[var(--color-text-tertiary)] leading-[1.45] mt-[2px]">
+                  Your name, email, account details, or any other personal information are never sent to OpenAI.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Privacy policy reference */}
+          <p className="text-[12px] text-[var(--color-text-quaternary)] text-center mb-[20px] leading-[1.45]">
+            For full details, see our Privacy Policy in Settings.
+          </p>
+        </div>
+
+        {/* Buttons */}
+        <div className="px-[24px] flex flex-col gap-[8px]">
+          <button
+            onClick={onAccept}
+            className="h-[50px] w-full rounded-[12px] bg-[var(--color-accent)] text-[16px] font-semibold text-white tracking-[-0.2px] transition-all active:scale-[0.98] active:opacity-90"
+          >
+            I Understand & Agree
+          </button>
+          <button
+            onClick={onCancel}
+            className="h-[44px] w-full rounded-[12px] text-[15px] font-medium text-[var(--color-text-tertiary)] tracking-[-0.2px] transition-all active:bg-[var(--color-fill-tertiary)]"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

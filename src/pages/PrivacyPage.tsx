@@ -103,7 +103,15 @@ export function PrivacyPage() {
             </p>
             <p>
               <strong className="text-[var(--color-text-primary)]">Ask AI conversations.</strong>{" "}
-              Questions you submit to the Ask AI feature and the generated responses are stored in Firestore. Your questions and selected article context are sent to OpenAI's API to generate answers.
+              When you use the Ask AI feature, the following data is sent to OpenAI's API to generate answers:
+            </p>
+            <ul className="list-disc pl-[20px] space-y-[4px] mt-[4px]">
+              <li>Your question text</li>
+              <li>Recent messages in the current conversation (for context)</li>
+              <li>Relevant article excerpts from your selected news sources (titles, snippets, dates)</li>
+            </ul>
+            <p>
+              Your name, email address, account credentials, and other personal identifiers are <strong className="text-[var(--color-text-primary)]">never</strong> sent to OpenAI. Generated responses are stored locally and in Cloud Firestore. The App requires your explicit consent before sending any data to OpenAI, which is presented the first time you use the Ask AI feature.
             </p>
             <p>
               <strong className="text-[var(--color-text-primary)]">Basic usage data.</strong>{" "}
@@ -121,12 +129,13 @@ export function PrivacyPage() {
             <ul className="list-disc pl-[20px] space-y-[4px]">
               <li>Provide and operate the App's features (briefs, feed, AI chat)</li>
               <li>Authenticate your identity and sync data across devices</li>
+              <li>Send questions and article context to OpenAI to generate AI-powered answers (only after you provide explicit consent)</li>
               <li>Deliver push notifications you've opted into</li>
               <li>Improve App performance and fix issues</li>
               <li>Comply with legal obligations</li>
             </ul>
             <p className="mt-[6px]">
-              We do not sell your personal information. We do not use your data for advertising or cross-app tracking.
+              We do not sell your personal information. We do not use your data for advertising or cross-app tracking. Third-party AI services that process data on our behalf provide equivalent privacy protections.
             </p>
           </Section>
 
@@ -140,7 +149,14 @@ export function PrivacyPage() {
                 <strong className="text-[var(--color-text-primary)]">Apple Sign-In</strong> — If you choose to sign in with Apple, authentication is handled by Apple's Sign in with Apple service. We receive only your name and email address (which may be a private relay address).
               </li>
               <li>
-                <strong className="text-[var(--color-text-primary)]">OpenAI</strong> — Article summarization and the Ask AI conversational feature. Article text and your questions may be processed by OpenAI's systems to generate answers.
+                <strong className="text-[var(--color-text-primary)]">OpenAI</strong> — Article summarization and the Ask AI conversational feature. When you use Ask AI, your question, recent conversation messages, and relevant article excerpts are sent to OpenAI's API to generate answers. No personal identifiers (name, email, account details) are included in these requests. OpenAI processes this data under their{" "}
+                <button
+                  onClick={() => openUrl("https://openai.com/policies/api-data-usage-policy")}
+                  className="font-medium text-[var(--color-accent)] active:opacity-70"
+                >
+                  API Data Usage Policy
+                </button>
+                {" "}and does not use API inputs to train their models. The App obtains your explicit consent before sending any data to OpenAI.
               </li>
               <li>
                 <strong className="text-[var(--color-text-primary)]">Apple App Store</strong> — Distribution and app-level analytics.

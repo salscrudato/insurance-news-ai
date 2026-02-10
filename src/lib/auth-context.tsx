@@ -18,6 +18,7 @@ import {
   onAuthStateChanged,
   signInAnonymously,
   signInWithPopup,
+  signInWithCredential,
   getRedirectResult,
   signOut as firebaseSignOut,
   GoogleAuthProvider,
@@ -65,7 +66,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let authStateReceived = false
-    const isNative = Capacitor.isNativePlatform()
 
     // Check for existing local guest session
     const localGuest = localStorage.getItem(LOCAL_GUEST_KEY)
@@ -75,89 +75,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authStateReceived = true
     }
 
-    // Check for redirect result (from signInWithRedirect) - web only
-    if (!isNative) {
+    // Check for redirect result (from signInWithRedirect) — web only
+    if (!Capacitor.isNativePlatform()) {
       getRedirectResult(auth).catch(() => {
-        // Redirect result error - ignore, onAuthStateChanged will handle
+        // Redirect result error — ignore, onAuthStateChanged will handle
       })
     }
 
-    // For native platforms, listen to the native plugin's auth state changes
-    // This is needed because the native Firebase SDK auth state doesn't automatically
-    // sync with the web SDK's onAuthStateChanged
-    let nativeListenerHandle: { remove: () => Promise<void> } | null = null
-
-    if (isNative) {
-      FirebaseAuthentication.addListener('authStateChange', (change) => {
-        authStateReceived = true
-
-        if (change.user) {
-          const nativeUser = {
-            uid: change.user.uid,
-            email: change.user.email,
-            displayName: change.user.displayName,
-            photoURL: change.user.photoUrl,
-            phoneNumber: change.user.phoneNumber,
-            emailVerified: change.user.emailVerified,
-            isAnonymous: change.user.isAnonymous,
-            providerId: change.user.providerId || 'firebase',
-            metadata: {},
-            providerData: change.user.providerData || [],
-            refreshToken: '',
-            tenantId: change.user.tenantId || null,
-            delete: async () => { throw new Error("Not implemented") },
-            getIdToken: async () => "",
-            getIdTokenResult: async () => ({ token: "", claims: {}, authTime: "", issuedAtTime: "", expirationTime: "", signInProvider: null, signInSecondFactor: null }),
-            reload: async () => {},
-            toJSON: () => ({}),
-          } as unknown as User
-
-          setUser(nativeUser)
-          localStorage.removeItem(LOCAL_GUEST_KEY)
-          setIsLocalGuest(false)
-        } else {
-          setUser(null)
-        }
-        setIsLoading(false)
-      }).then(handle => {
-        nativeListenerHandle = handle
-      })
-
-      // Also check current user immediately on native
-      FirebaseAuthentication.getCurrentUser().then((result) => {
-        if (result.user && !authStateReceived) {
-          authStateReceived = true
-          const nativeUser = {
-            uid: result.user.uid,
-            email: result.user.email,
-            displayName: result.user.displayName,
-            photoURL: result.user.photoUrl,
-            phoneNumber: result.user.phoneNumber,
-            emailVerified: result.user.emailVerified,
-            isAnonymous: result.user.isAnonymous,
-            providerId: result.user.providerId || 'firebase',
-            metadata: {},
-            providerData: result.user.providerData || [],
-            refreshToken: '',
-            tenantId: result.user.tenantId || null,
-            delete: async () => { throw new Error("Not implemented") },
-            getIdToken: async () => "",
-            getIdTokenResult: async () => ({ token: "", claims: {}, authTime: "", issuedAtTime: "", expirationTime: "", signInProvider: null, signInSecondFactor: null }),
-            reload: async () => {},
-            toJSON: () => ({}),
-          } as unknown as User
-
-          setUser(nativeUser)
-          localStorage.removeItem(LOCAL_GUEST_KEY)
-          setIsLocalGuest(false)
-          setIsLoading(false)
-        }
-      }).catch(() => {
-        // Native getCurrentUser error - ignore, onAuthStateChanged will handle
-      })
-    }
-
-    // Web SDK auth state listener (works on web, may not fire on native after native sign-in)
+    // Web SDK auth state listener — single source of truth for user state.
+    // On native, our sign-in methods sync the credential to the web SDK
+    // via signInWithCredential, so this listener fires for all platforms.
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       authStateReceived = true
       setUser(firebaseUser)
@@ -168,11 +95,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false)
     })
 
-    // Timeout fallback - if auth state hasn't been received after 5 seconds,
+    // Timeout fallback — if auth state hasn't been received after 5 seconds,
     // force loading to false so the app doesn't hang
     const timeoutId = setTimeout(() => {
       if (!authStateReceived) {
-        // Auth state timeout - force loading to false so the app doesn't hang
         setIsLoading(false)
       }
     }, 5000)
@@ -180,68 +106,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       clearTimeout(timeoutId)
       unsubscribe()
-      if (nativeListenerHandle) {
-        nativeListenerHandle.remove()
-      }
     }
   }, [])
 
   // Sign in with Google
+  // On native: uses native Google Sign-In SDK, then syncs credential to web Firebase SDK.
+  // On web: uses Firebase popup sign-in directly.
   const signInWithGoogle = useCallback(async () => {
-    const isNative = Capacitor.isNativePlatform()
-
-    if (isNative) {
+    if (Capacitor.isNativePlatform()) {
+      // 1. Sign in on the native layer
       const result = await FirebaseAuthentication.signInWithGoogle()
-      if (!result.user) {
-        throw new Error("Google sign-in failed - no user returned")
+
+      // 2. Sync to web layer using the credential from native
+      const idToken = result.credential?.idToken
+      if (!idToken) {
+        throw new Error("Google sign-in failed — no ID token returned from native")
       }
+
+      const credential = GoogleAuthProvider.credential(idToken)
+      await signInWithCredential(auth, credential)
     } else {
       await signInWithPopup(auth, googleProvider)
     }
   }, [])
 
   // Sign in with Apple
-  // Uses native Firebase Authentication plugin on iOS, Firebase web SDK on web
-  // If the current user is anonymous, attempts to link Apple credential to preserve data
+  // On native: uses skipNativeAuth so the plugin only presents the Apple Sign-In UI
+  // and returns raw credentials without signing in on the native Firebase SDK.
+  // We then sign in on the web SDK ourselves using signInWithCredential.
+  // (Apple Sign-In requires skipNativeAuth=true per the capacitor-firebase docs.)
+  // On web: uses Firebase popup sign-in directly.
+  // If the current user is anonymous, attempts to link Apple credential to preserve data.
   const signInWithApple = useCallback(async () => {
-    const isNative = Capacitor.isNativePlatform()
+    if (Capacitor.isNativePlatform()) {
+      // skipNativeAuth: true — only get the Apple credential, don't sign in natively.
+      // This is required for Apple Sign-In to work with the web Firebase SDK because
+      // the nonce must be handled consistently on a single layer.
+      const result = await FirebaseAuthentication.signInWithApple({
+        skipNativeAuth: true,
+      })
 
-    if (isNative) {
+      if (!result.credential?.idToken) {
+        throw new Error("Apple sign-in failed — no credential returned")
+      }
+
+      const oauthCredential = new OAuthProvider("apple.com").credential({
+        idToken: result.credential.idToken,
+        rawNonce: result.credential.nonce ?? undefined,
+      })
+
       const currentUser = auth.currentUser
 
       // If user is anonymous, try to link Apple credential to preserve their data
       if (currentUser && currentUser.isAnonymous) {
         try {
-          const result = await FirebaseAuthentication.signInWithApple()
-          if (!result.credential?.idToken) {
-            throw new Error("Apple sign-in returned no ID token")
-          }
-
-          const oauthCredential = new OAuthProvider("apple.com").credential({
-            idToken: result.credential.idToken,
-            rawNonce: result.credential.nonce ?? undefined,
-          })
-
           await linkWithCredential(currentUser, oauthCredential)
-
-          if (result.user?.displayName) {
-            await currentUser.reload()
-          }
+          await currentUser.reload()
           return
         } catch (linkError: unknown) {
           const firebaseError = linkError as { code?: string }
+          // If credential is already linked to another account, fall through to
+          // a regular sign-in which will switch to that account instead.
           if (firebaseError.code !== "auth/credential-already-in-use") {
             throw linkError
           }
         }
       }
 
-      // Direct sign-in (no anonymous user, or linking failed)
-      const result = await FirebaseAuthentication.signInWithApple()
-
-      if (!result.user) {
-        throw new Error("Apple sign-in failed - no user returned")
-      }
+      // Direct sign-in — sync credential to web SDK
+      await signInWithCredential(auth, oauthCredential)
     } else {
       // Web flow using Firebase OAuthProvider popup
       const appleProvider = new OAuthProvider("apple.com")
@@ -297,13 +230,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Sign out
   // Designed to be resilient — always clears local state even if Firebase SDK
   // calls fail (e.g., after server-side account deletion).
+  // On native, signs out of both the native SDK and the web SDK.
   const signOut = useCallback(async () => {
-    const isNative = Capacitor.isNativePlatform()
-
     localStorage.removeItem(LOCAL_GUEST_KEY)
     setIsLocalGuest(false)
 
-    // Use auth.currentUser instead of stale closure to check if there's a user
     const currentUser = auth.currentUser
     setUser(null)
 
@@ -318,8 +249,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ])
 
       try {
-        if (isNative) {
-          await withTimeout(FirebaseAuthentication.signOut())
+        if (Capacitor.isNativePlatform()) {
+          // Sign out of both native and web SDKs in parallel
+          await withTimeout(
+            Promise.all([
+              FirebaseAuthentication.signOut(),
+              firebaseSignOut(auth),
+            ]).then(() => {})
+          )
         } else {
           await withTimeout(firebaseSignOut(auth))
         }
