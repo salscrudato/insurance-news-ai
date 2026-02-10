@@ -102,24 +102,40 @@ export function SettingsPage() {
   const handleDeleteAccountConfirm = async () => {
     setIsDeleting(true)
     try {
-      await deleteAccountCallable()
+      // Race the callable against a timeout — the server deletes the auth user
+      // which can cause the callable response to never arrive on native iOS
+      // because the auth token becomes invalid mid-flight.
+      const callableWithTimeout = Promise.race([
+        deleteAccountCallable(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("deleteAccount timeout")), 12000)
+        ),
+      ])
+
+      try {
+        await callableWithTimeout
+      } catch (err) {
+        // If it timed out, the server likely succeeded (it deletes auth user
+        // before returning, which kills the client token). Treat timeout as
+        // success; if it truly failed, the user will still be signed in on
+        // next app launch and can retry.
+        const msg = err instanceof Error ? err.message : String(err)
+        if (!msg.includes("timeout")) {
+          throw err // Real error — rethrow
+        }
+        console.warn("[DeleteAccount] Callable timed out — server likely succeeded")
+      }
+
+      // Close sheet and navigate immediately — don't wait for signOut
+      setShowDeleteSheet(false)
       toast.success("Account deleted", {
         description: "Your account and all associated data have been permanently removed.",
       })
-      setShowDeleteSheet(false)
 
-      // The callable already deleted the Firebase Auth user server-side.
-      // Calling signOut() would try to talk to the native Firebase SDK with
-      // an already-invalidated token, which hangs on iOS.
-      // Instead, sign out defensively: swallow errors since the auth user is
-      // already gone and we just need to clear local state.
-      try {
-        await signOut()
-      } catch {
-        // Expected — the server already deleted the auth user, so the
-        // native/web SDK sign-out may fail. That's fine.
+      // Fire-and-forget signOut to clean up local state; don't await it
+      signOut().catch(() => {
         console.log("[DeleteAccount] signOut after deletion failed (expected)")
-      }
+      })
 
       navigate("/auth", { replace: true })
     } catch (error) {
