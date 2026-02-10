@@ -12,6 +12,7 @@ import {
   persistentLocalCache,
   persistentMultipleTabManager,
   connectFirestoreEmulator,
+  getFirestore,
   type Firestore,
 } from "firebase/firestore"
 import { getAuth, connectAuthEmulator } from "firebase/auth"
@@ -44,7 +45,6 @@ try {
   })
 } catch {
   // Firestore may already be initialized (hot reload), use existing instance
-  const { getFirestore } = await import("firebase/firestore")
   db = getFirestore(app)
 }
 
