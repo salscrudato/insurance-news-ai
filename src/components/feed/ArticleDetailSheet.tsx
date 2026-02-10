@@ -1,23 +1,23 @@
 /**
- * Article detail sheet for the feed
+ * Premium Article Detail Sheet
  *
- * Shows headline, source, publish time, snippet, and actions:
- * - Read on source (external link)
- * - Generate TL;DR (calls getOrCreateArticleAI)
- * - Bookmark toggle
+ * Apple-inspired design with:
+ * - Clean header: source, timestamp, title
+ * - Hero image (when available)
+ * - AI Analysis card: TL;DR, Why it matters for P&C, Key implications
+ * - Actions: Read Article (Capacitor Browser on iOS), Bookmark
  */
 
 import { useState, useEffect } from "react"
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet"
-import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
 import {
   SHEET_TOKENS,
   SheetHeaderBlock,
-  SheetSection,
   SheetSnippet,
   SheetActions,
   SheetIconButton,
+  SheetAICard,
+  SheetAICardSkeleton,
 } from "@/components/ui/sheet-primitives"
 import { Bookmark, Sparkles } from "lucide-react"
 import { toast } from "sonner"
@@ -25,7 +25,8 @@ import { useIsBookmarked, useToggleBookmark, useArticleAI } from "@/lib/hooks"
 import { useAuth } from "@/lib/auth-context"
 import type { Article, ArticleAI } from "@/types/firestore"
 import type { Timestamp } from "firebase/firestore"
-import { hapticLight } from "@/lib/haptics"
+import { hapticMedium, hapticLight } from "@/lib/haptics"
+import { openUrl } from "@/lib/browser"
 
 interface ArticleDetailSheetProps {
   article: Article | null
@@ -55,7 +56,7 @@ export function ArticleDetailSheet({
   open,
   onOpenChange,
 }: ArticleDetailSheetProps) {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, isAnonymous } = useAuth()
   const { data: isBookmarked } = useIsBookmarked(article?.id)
   const toggleBookmark = useToggleBookmark()
   const generateAI = useArticleAI()
@@ -74,14 +75,20 @@ export function ArticleDetailSheet({
 
   if (!article) return null
 
-  const handleOpenArticle = () => {
-    hapticLight()
-    window.open(article.url, "_blank", "noopener,noreferrer")
+  const handleOpenArticle = async () => {
+    hapticMedium()
+    await openUrl(article.url)
   }
 
   const handleBookmark = () => {
     if (!isAuthenticated) {
       toast.error("Sign in to bookmark articles")
+      return
+    }
+    if (isAnonymous) {
+      toast.error("Guests cannot bookmark articles", {
+        description: "Sign in to save articles for later",
+      })
       return
     }
     hapticLight()
@@ -101,7 +108,7 @@ export function ArticleDetailSheet({
 
   const handleGenerateAI = () => {
     if (!isAuthenticated) {
-      toast.error("Sign in to generate summaries")
+      toast.error("Sign in to unlock AI insights")
       return
     }
     hapticLight()
@@ -115,14 +122,14 @@ export function ArticleDetailSheet({
         } as ArticleAI)
 
         if (!data.cached) {
-          toast.success("Summary generated", {
-            description: `${data.remaining} summaries remaining today`,
+          toast.success("AI analysis generated", {
+            description: `${data.remaining} remaining today`,
           })
         }
       },
       onError: (error) => {
         console.error("Failed to generate AI:", error)
-        toast.error("Failed to generate summary", {
+        toast.error("Failed to generate analysis", {
           description: "Please try again later",
         })
       },
@@ -155,7 +162,7 @@ export function ArticleDetailSheet({
           title={article.title}
         />
 
-        {/* Image */}
+        {/* Hero Image */}
         {article.imageUrl && (
           <div className={SHEET_TOKENS.imageClass}>
             <img
@@ -166,75 +173,39 @@ export function ArticleDetailSheet({
           </div>
         )}
 
-        {/* AI Summary section */}
+        {/* AI Analysis Card */}
         {isGenerating ? (
-          <div className="mb-[24px] overflow-hidden rounded-[var(--radius-2xl)] bg-[var(--color-fill-quaternary)]">
-            <div className="border-b border-[var(--color-separator)] px-[18px] py-[16px]">
-              <Skeleton className="mb-[12px] h-4 w-16" />
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="mt-[8px] h-4 w-3/4" />
-            </div>
-            <div className="px-[18px] py-[16px]">
-              <Skeleton className="mb-[12px] h-4 w-24" />
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="mt-[8px] h-4 w-5/6" />
-            </div>
-          </div>
+          <SheetAICardSkeleton className={SHEET_TOKENS.sectionMargin} />
         ) : hasAI ? (
-          <div className="mb-[24px] overflow-hidden rounded-[var(--radius-2xl)] bg-[var(--color-fill-quaternary)]">
-            <div className="border-b border-[var(--color-separator)] px-[18px] py-[16px]">
-              <SheetSection label="TL;DR">{aiContent.tldr}</SheetSection>
-            </div>
-
-            <div className="px-[18px] py-[16px]">
-              <SheetSection label="Why It Matters">
-                {aiContent.whyItMatters}
-              </SheetSection>
-            </div>
-
-            {/* Topics */}
-            {aiContent.topics && aiContent.topics.length > 0 && (
-              <div className="flex flex-wrap gap-[6px] border-t border-[var(--color-separator)] px-[18px] py-[13px]">
-                {aiContent.topics.map((topic) => (
-                  <span
-                    key={topic}
-                    className="rounded-full bg-[var(--color-surface)] px-[12px] py-[6px] text-[12px] font-medium tracking-[-0.05px] text-[var(--color-text-secondary)]"
-                  >
-                    {topic}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {/* AI Disclaimer */}
-            <div className="border-t border-[var(--color-separator)] px-[18px] py-[10px]">
-              <p className="text-[11px] text-[var(--color-text-tertiary)]">
-                Summary generated by AI. Read original source for full article.
-              </p>
-            </div>
-          </div>
+          <SheetAICard
+            className={SHEET_TOKENS.sectionMargin}
+            tldr={aiContent.tldr}
+            whyItMatters={aiContent.whyItMatters}
+            topics={aiContent.topics}
+          />
         ) : (
-          /* Generate TL;DR button when no AI available */
+          /* Generate AI Analysis button when no AI available */
           <div className={SHEET_TOKENS.sectionMargin}>
-            <Button
-              variant="outline"
-              size="lg"
-              className="w-full gap-[10px]"
+            <button
               onClick={handleGenerateAI}
               disabled={isGenerating}
+              className="group flex w-full items-center justify-center gap-[10px] rounded-[var(--radius-2xl)] border border-dashed border-[var(--color-border-strong)] bg-[var(--color-fill-quaternary)] px-[20px] py-[18px] text-[15px] font-medium text-[var(--color-text-secondary)] transition-all duration-200 hover:border-[var(--color-accent)] hover:bg-[var(--color-accent-soft)] hover:text-[var(--color-accent)] active:scale-[0.98] disabled:opacity-50"
             >
-              <Sparkles className="h-[18px] w-[18px]" />
-              <span>Generate AI Summary</span>
-            </Button>
+              <Sparkles className="h-[18px] w-[18px] transition-colors group-hover:text-[var(--color-accent)]" />
+              <span>Generate AI Analysis</span>
+            </button>
           </div>
         )}
 
-        {/* Snippet */}
-        {article.snippet && <SheetSnippet>{article.snippet}</SheetSnippet>}
+        {/* Original Snippet */}
+        {article.snippet && !hasAI && (
+          <SheetSnippet>{article.snippet}</SheetSnippet>
+        )}
 
-        {/* Actions */}
+        {/* Primary Action */}
         <SheetActions
           onReadArticle={handleOpenArticle}
+          primaryLabel="Read Full Article"
           secondaryButton={
             <SheetIconButton
               onClick={handleBookmark}

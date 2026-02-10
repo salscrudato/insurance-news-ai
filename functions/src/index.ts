@@ -5,9 +5,15 @@
 import { onRequest, onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { initializeApp, getApps } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { isAdminEmail } from "./config/admin.js";
 import { ingestAllEnabledSources, fetchOgImage } from "./lib/ingestion/index.js";
+import {
+  ensureArticleVector,
+  EMBEDDING_MODEL,
+  DEFAULT_EMBEDDING_DIMS,
+} from "./lib/embeddings/index.js";
 import {
   getOpenAIClient,
   openaiApiKey,
@@ -25,6 +31,13 @@ import {
   type ArticleAIResponse,
   type DailyBriefResponse,
 } from "./lib/ai/index.js";
+import {
+  answerQuestion,
+  performRetrieval,
+  streamRagAnswer,
+  type RagScope,
+  type ChatMessage,
+} from "./lib/rag/index.js";
 import {
   sendNotificationToOptedInUsers,
   formatDateForNotification,
@@ -552,7 +565,7 @@ function getTodayDateET(): string {
  */
 export const generateDailyBrief = onSchedule(
   {
-    schedule: "0 6 * * *", // 6:00 AM daily
+    schedule: "0 0 * * *", // 12:00 AM (midnight) daily
     timeZone: "America/New_York",
     secrets: [openaiApiKey],
   },
@@ -929,3 +942,501 @@ export const getTodayBrief = onCall<GetTodayBriefData>(async (request) => {
     topStoriesWithArticles,
   };
 });
+
+// ============================================================================
+// Embeddings Functions
+// ============================================================================
+
+interface BackfillEmbeddingsData {
+  limitPerRun?: number;
+  daysBack?: number;
+}
+
+/**
+ * Admin callable to backfill embeddings for articles.
+ * Only processes isRelevant articles within the last N days.
+ * Uses pagination to avoid timeouts.
+ *
+ * @param limitPerRun - Max articles to process per run (default: 100)
+ * @param daysBack - How many days back to look (default: 30)
+ */
+export const backfillEmbeddingsLast30Days = onCall<BackfillEmbeddingsData>(
+  {
+    secrets: [openaiApiKey],
+    memory: "512MiB",
+    timeoutSeconds: 540, // 9 minutes
+  },
+  async (request) => {
+    // Require authentication
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Must be authenticated");
+    }
+
+    // Require admin
+    const userEmail = request.auth.token.email;
+    if (!isAdminEmail(userEmail)) {
+      throw new HttpsError("permission-denied", "Admin access required");
+    }
+
+    const limitPerRun = request.data?.limitPerRun ?? 100;
+    const daysBack = request.data?.daysBack ?? 30;
+
+    console.log("[backfillEmbeddings] Starting backfill", {
+      limitPerRun,
+      daysBack,
+      model: EMBEDDING_MODEL,
+      dims: DEFAULT_EMBEDDING_DIMS,
+    });
+
+    // Calculate cutoff date
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysBack);
+    const cutoffTimestamp = Timestamp.fromDate(cutoffDate);
+
+    // Query articles that are relevant and published within the time range
+    // and are missing embeddings
+    const articlesQuery = db
+      .collection("articles")
+      .where("isRelevant", "==", true)
+      .where("publishedAt", ">=", cutoffTimestamp)
+      .orderBy("publishedAt", "desc")
+      .limit(limitPerRun * 2); // Fetch more to account for already-embedded articles
+
+    const snapshot = await articlesQuery.get();
+    console.log("[backfillEmbeddings] Found articles to check", {
+      count: snapshot.size,
+    });
+
+    let processed = 0;
+    let embeddingsCreated = 0;
+    let searchTokensCreated = 0;
+    let skipped = 0;
+    let alreadyHasEmbedding = 0;
+
+    for (const doc of snapshot.docs) {
+      if (processed >= limitPerRun) break;
+
+      const article = doc.data() as Article;
+
+      // Skip if already has embedding
+      if (article.embedding) {
+        alreadyHasEmbedding++;
+        continue;
+      }
+
+      try {
+        const result = await ensureArticleVector(doc.id);
+
+        if (result.skipped) {
+          skipped++;
+        } else {
+          if (result.embeddingComputed) embeddingsCreated++;
+          if (result.searchTokensComputed) searchTokensCreated++;
+        }
+
+        processed++;
+
+        // Log progress every 10 articles
+        if (processed % 10 === 0) {
+          console.log("[backfillEmbeddings] Progress", {
+            processed,
+            embeddingsCreated,
+            searchTokensCreated,
+          });
+        }
+      } catch (error) {
+        console.error("[backfillEmbeddings] Error processing article", {
+          articleId: doc.id,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+        skipped++;
+      }
+    }
+
+    console.log("[backfillEmbeddings] Completed", {
+      processed,
+      embeddingsCreated,
+      searchTokensCreated,
+      skipped,
+      alreadyHasEmbedding,
+    });
+
+    return {
+      success: true,
+      processed,
+      embeddingsCreated,
+      searchTokensCreated,
+      skipped,
+      alreadyHasEmbedding,
+      model: EMBEDDING_MODEL,
+      dims: DEFAULT_EMBEDDING_DIMS,
+    };
+  }
+);
+
+/**
+ * Scheduled function to continuously backfill embeddings.
+ * Runs every 6 hours and processes up to 50 articles per run.
+ */
+export const runEmbeddingsBackfill = onSchedule(
+  {
+    schedule: "every 6 hours",
+    timeZone: "America/New_York",
+    memory: "512MiB",
+    timeoutSeconds: 540,
+    secrets: [openaiApiKey],
+  },
+  async () => {
+    const limitPerRun = 50;
+    const daysBack = 30;
+
+    console.log("[runEmbeddingsBackfill] Starting scheduled backfill");
+
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysBack);
+    const cutoffTimestamp = Timestamp.fromDate(cutoffDate);
+
+    // Query articles missing embeddings
+    const articlesQuery = db
+      .collection("articles")
+      .where("isRelevant", "==", true)
+      .where("publishedAt", ">=", cutoffTimestamp)
+      .orderBy("publishedAt", "desc")
+      .limit(limitPerRun * 2);
+
+    const snapshot = await articlesQuery.get();
+
+    let processed = 0;
+    let embeddingsCreated = 0;
+    let searchTokensCreated = 0;
+
+    for (const doc of snapshot.docs) {
+      if (processed >= limitPerRun) break;
+
+      const article = doc.data() as Article;
+      if (article.embedding) continue;
+
+      try {
+        const result = await ensureArticleVector(doc.id);
+        if (!result.skipped) {
+          if (result.embeddingComputed) embeddingsCreated++;
+          if (result.searchTokensComputed) searchTokensCreated++;
+          processed++;
+        }
+      } catch (error) {
+        console.error("[runEmbeddingsBackfill] Error", {
+          articleId: doc.id,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
+
+    console.log("[runEmbeddingsBackfill] Completed", {
+      processed,
+      embeddingsCreated,
+      searchTokensCreated,
+    });
+  }
+);
+
+// ============================================================================
+// RAG Chat Functions
+// ============================================================================
+
+interface AnswerQuestionRagData {
+  question: string;
+  scope: "today" | "7d" | "30d";
+  category: string;
+  sourceIds: string[] | null;
+  history: Array<{ role: "user" | "assistant"; content: string }>;
+}
+
+/**
+ * Answer a question using RAG (Retrieval-Augmented Generation).
+ *
+ * Retrieves relevant articles based on scope/category/sources,
+ * reranks by semantic similarity, and generates a grounded answer
+ * with citations.
+ *
+ * Requires authentication. Rate limited per user.
+ *
+ * @param question - The user's question
+ * @param scope - Time window: "today" (36h), "7d", or "30d"
+ * @param category - Category filter: "all" or specific category
+ * @param sourceIds - Optional array of source IDs to filter by
+ * @param history - Chat history (last N messages, N<=8)
+ * @returns Grounded answer with citations and follow-ups
+ */
+export const answerQuestionRag = onCall<AnswerQuestionRagData>(
+  {
+    secrets: [openaiApiKey],
+    memory: "512MiB",
+    timeoutSeconds: 120,
+  },
+  async (request) => {
+    // Require authentication
+    if (!request.auth) {
+      throw new HttpsError(
+        "unauthenticated",
+        "You must be logged in to use this feature."
+      );
+    }
+
+    const uid = request.auth.uid;
+    const { question, scope, category, sourceIds, history } = request.data;
+
+    // Validate input
+    if (typeof question !== "string" || question.trim() === "") {
+      throw new HttpsError(
+        "invalid-argument",
+        "question must be a non-empty string."
+      );
+    }
+
+    if (!["today", "7d", "30d"].includes(scope)) {
+      throw new HttpsError(
+        "invalid-argument",
+        "scope must be 'today', '7d', or '30d'."
+      );
+    }
+
+    // Check rate limit
+    const rateLimit = await checkRateLimit(uid, "answerRag");
+    if (!rateLimit.isAllowed) {
+      throw new HttpsError(
+        "resource-exhausted",
+        `Daily limit reached. Try again tomorrow. (${rateLimit.limit} requests/day)`
+      );
+    }
+
+    console.log("[answerQuestionRag] Processing", {
+      uid,
+      questionLength: question.length,
+      scope,
+      category,
+      sourceCount: sourceIds?.length ?? "all",
+      historyLength: history?.length ?? 0,
+    });
+
+    try {
+      // Build scope object
+      const ragScope: RagScope = {
+        timeWindow: scope,
+        category: category || "all",
+        sourceIds: sourceIds || null,
+      };
+
+      // Sanitize history
+      const chatHistory: ChatMessage[] = (history || [])
+        .slice(-8)
+        .filter(
+          (msg): msg is ChatMessage =>
+            msg &&
+            typeof msg.role === "string" &&
+            (msg.role === "user" || msg.role === "assistant") &&
+            typeof msg.content === "string"
+        );
+
+      // Generate answer with userId for caching
+      const answer = await answerQuestion(question, ragScope, chatHistory, uid);
+
+      console.log("[answerQuestionRag] Success", {
+        answerLength: answer.answerMarkdown.length,
+        citationCount: answer.citations.length,
+        takeawayCount: answer.takeaways.length,
+        cached: answer.cached || false,
+        requestId: answer.requestId,
+      });
+
+      return {
+        ...answer,
+        remaining: rateLimit.remaining,
+      };
+    } catch (error) {
+      console.error("[answerQuestionRag] Error", {
+        error: error instanceof Error ? error.message : "Unknown error",
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      throw new HttpsError(
+        "internal",
+        "Failed to generate answer. Please try again."
+      );
+    }
+  }
+);
+
+// ============================================================================
+// Streaming RAG Chat Function
+// ============================================================================
+
+/**
+ * Streaming version of answerQuestionRag using Server-Sent Events (SSE).
+ *
+ * This endpoint:
+ * 1. Verifies Firebase Auth token from Authorization header
+ * 2. Performs retrieval (same as answerQuestionRag)
+ * 3. Streams OpenAI response tokens as SSE events
+ * 4. Sends a final "done" event with citations, takeaways, and followUps
+ *
+ * Client sends POST with JSON body:
+ * {
+ *   question: string,
+ *   scope: "today" | "7d" | "30d",
+ *   category: string,
+ *   sourceIds: string[] | null,
+ *   history: Array<{ role: "user" | "assistant"; content: string }>
+ * }
+ *
+ * SSE events:
+ * - data: {"text": "chunk"} - streamed text chunks
+ * - event: done, data: {"citations": [...], "takeaways": [...], "followUps": [...], "answerMarkdown": "..."}
+ */
+export const answerQuestionRagStream = onRequest(
+  {
+    secrets: [openaiApiKey],
+    memory: "512MiB",
+    timeoutSeconds: 120,
+    cors: true, // Enable CORS with default settings
+  },
+  async (req, res) => {
+    // Handle CORS preflight
+    if (req.method === "OPTIONS") {
+      res.status(204).send("");
+      return;
+    }
+
+    // Only allow POST
+    if (req.method !== "POST") {
+      res.status(405).json({ error: "Method not allowed" });
+      return;
+    }
+
+    // Verify Firebase Auth token
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      res.status(401).json({ error: "Missing or invalid Authorization header" });
+      return;
+    }
+
+    const token = authHeader.substring(7);
+    let uid: string;
+
+    try {
+      const decodedToken = await getAuth().verifyIdToken(token);
+      uid = decodedToken.uid;
+    } catch (error) {
+      console.error("[answerQuestionRagStream] Token verification failed:", error);
+      res.status(401).json({ error: "Invalid authentication token" });
+      return;
+    }
+
+    // Parse request body
+    const { question, scope, category, sourceIds, history } = req.body || {};
+
+    // Validate input
+    if (typeof question !== "string" || question.trim() === "") {
+      res.status(400).json({ error: "question must be a non-empty string" });
+      return;
+    }
+
+    if (!["today", "7d", "30d"].includes(scope)) {
+      res.status(400).json({ error: "scope must be 'today', '7d', or '30d'" });
+      return;
+    }
+
+    // Check rate limit
+    const rateLimit = await checkRateLimit(uid, "answerRag");
+    if (!rateLimit.isAllowed) {
+      res.status(429).json({
+        error: `Daily limit reached. Try again tomorrow. (${rateLimit.limit} requests/day)`,
+      });
+      return;
+    }
+
+    console.log("[answerQuestionRagStream] Processing", {
+      uid,
+      questionLength: question.length,
+      scope,
+      category,
+      sourceCount: sourceIds?.length ?? "all",
+      historyLength: history?.length ?? 0,
+    });
+
+    try {
+      // Build scope object
+      const ragScope: RagScope = {
+        timeWindow: scope,
+        category: category || "all",
+        sourceIds: sourceIds || null,
+      };
+
+      // Sanitize history
+      const chatHistory: ChatMessage[] = (history || [])
+        .slice(-8)
+        .filter(
+          (msg: unknown): msg is ChatMessage =>
+            msg !== null &&
+            typeof msg === "object" &&
+            "role" in msg &&
+            "content" in msg &&
+            typeof (msg as ChatMessage).role === "string" &&
+            ((msg as ChatMessage).role === "user" || (msg as ChatMessage).role === "assistant") &&
+            typeof (msg as ChatMessage).content === "string"
+        );
+
+      // Perform retrieval (uses hardened pipeline with input sanitization, lexical+semantic ranking)
+      const retrieval = await performRetrieval(question, ragScope, chatHistory);
+
+      // Set SSE headers
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("Connection", "keep-alive");
+      res.setHeader("X-Accel-Buffering", "no"); // Disable nginx buffering
+
+      // If retrieval was refused (input validation, insufficient context)
+      if (retrieval.refused || (retrieval.noResults && retrieval.noResultsResponse)) {
+        const response = retrieval.noResultsResponse;
+        if (response) {
+          // Send the answer as text first
+          res.write(`data: ${JSON.stringify({ text: response.answerMarkdown })}\n\n`);
+          // Send done event
+          res.write(`event: done\ndata: ${JSON.stringify({
+            citations: response.citations,
+            takeaways: response.takeaways,
+            followUps: response.followUps,
+            answerMarkdown: response.answerMarkdown,
+            refused: retrieval.refused || false,
+          })}\n\n`);
+        }
+        console.log("[answerQuestionRagStream] Refused/NoResults", {
+          refused: retrieval.refused,
+          sanitizationRisk: retrieval.sanitization?.riskScore,
+        });
+        res.end();
+        return;
+      }
+
+      // Stream the answer
+      await streamRagAnswer(res, question, retrieval.context, chatHistory);
+
+      console.log("[answerQuestionRagStream] Success", {
+        contextArticles: retrieval.context.length,
+      });
+      res.end();
+    } catch (error) {
+      console.error("[answerQuestionRagStream] Error", {
+        error: error instanceof Error ? error.message : "Unknown error",
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+
+      // If headers haven't been sent yet, send error as JSON
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Failed to generate answer. Please try again." });
+      } else {
+        // If streaming already started, send error as SSE event
+        res.write(`event: error\ndata: ${JSON.stringify({ error: "Stream interrupted" })}\n\n`);
+        res.end();
+      }
+    }
+  }
+);

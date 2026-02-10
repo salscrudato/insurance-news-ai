@@ -36,7 +36,7 @@ function formatRelativeTime(timestamp: Timestamp): string {
 }
 
 export function ArticleRow({ article, onSelect, showBookmark = true }: ArticleRowProps) {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, isAnonymous } = useAuth()
   const { data: isBookmarked } = useIsBookmarked(showBookmark ? article.id : undefined)
   const toggleBookmark = useToggleBookmark()
 
@@ -45,6 +45,13 @@ export function ArticleRow({ article, onSelect, showBookmark = true }: ArticleRo
 
     if (!isAuthenticated) {
       toast.error("Sign in to bookmark articles")
+      return
+    }
+
+    if (isAnonymous) {
+      toast.error("Guests cannot bookmark articles", {
+        description: "Sign in to save articles for later",
+      })
       return
     }
 

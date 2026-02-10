@@ -4,8 +4,10 @@
  */
 
 import { useState } from "react"
-import { ChevronDown, Check, Clock, Newspaper } from "lucide-react"
+import { ChevronDown, Check, Newspaper, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Chip } from "@/components/ui/chip"
+import { SegmentedControl, type SegmentOption } from "@/components/ui/segmented-control"
 import {
   Sheet,
   SheetContent,
@@ -15,7 +17,10 @@ import {
 } from "@/components/ui/sheet"
 import type { SourceCategory } from "@/types/firestore"
 import { cn } from "@/lib/utils"
-import { hapticLight } from "@/lib/haptics"
+import { hapticLight, hapticWarning } from "@/lib/haptics"
+
+// Maximum sources allowed due to Firestore 'in' query limitation
+export const MAX_SOURCE_FILTER = 10
 
 // Category configuration
 const CATEGORIES: { value: SourceCategory | "all"; label: string }[] = [
@@ -28,11 +33,11 @@ const CATEGORIES: { value: SourceCategory | "all"; label: string }[] = [
   { value: "insurtech", label: "InsurTech" },
 ]
 
-// Time window options
-const TIME_WINDOWS: { value: "24h" | "7d" | "all"; label: string }[] = [
+// Time window options for segmented control
+const TIME_WINDOW_OPTIONS: SegmentOption<"24h" | "7d" | "all">[] = [
   { value: "24h", label: "24h" },
-  { value: "7d", label: "7 days" },
-  { value: "all", label: "All time" },
+  { value: "7d", label: "7d" },
+  { value: "all", label: "All" },
 ]
 
 interface CategoryChipsProps {
@@ -53,23 +58,25 @@ export function CategoryChips({ value, onChange }: CategoryChipsProps) {
       aria-label="Filter by category"
     >
       <div className="flex gap-[6px]">
-        {CATEGORIES.map((cat) => (
-          <button
-            key={cat.value}
-            role="tab"
-            aria-selected={value === cat.value}
-            onClick={() => handleChange(cat.value)}
-            className={cn(
-              // min-h-[32px] with py gives touch area; horizontal spacing adequate
-              "shrink-0 rounded-full min-h-[32px] px-[14px] py-[6px] text-[13px] font-medium tracking-[-0.08px] transition-all duration-[var(--duration-fast)] ease-[var(--ease-ios)]",
-              value === cat.value
-                ? "bg-[var(--color-text-primary)] text-white"
-                : "text-[var(--color-text-secondary)] active:bg-[var(--color-fill-tertiary)]"
-            )}
-          >
-            {cat.label}
-          </button>
-        ))}
+        {CATEGORIES.map((cat) => {
+          const isActive = value === cat.value
+          return (
+            <Chip
+              key={cat.value}
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => handleChange(cat.value)}
+              variant={isActive ? "filterActive" : "filter"}
+              size="default"
+              className={cn(
+                "shrink-0",
+                isActive && "bg-[var(--color-text-primary)]"
+              )}
+            >
+              {cat.label}
+            </Chip>
+          )
+        })}
       </div>
     </div>
   )
@@ -80,60 +87,17 @@ interface TimeWindowToggleProps {
   onChange: (value: "24h" | "7d" | "all") => void
 }
 
+/**
+ * iOS-style segmented control for time window selection
+ */
 export function TimeWindowToggle({ value, onChange }: TimeWindowToggleProps) {
-  const [open, setOpen] = useState(false)
-
-  const handleChange = (newValue: "24h" | "7d" | "all") => {
-    hapticLight()
-    onChange(newValue)
-    setOpen(false)
-  }
-
-  const currentLabel = TIME_WINDOWS.find((tw) => tw.value === value)?.label ?? "7 days"
-
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
-        <button
-          className="flex min-h-[44px] min-w-[44px] items-center gap-[4px] rounded-[var(--radius-md)] px-[10px] py-[8px] text-[13px] font-medium tracking-[-0.08px] text-[var(--color-text-secondary)] transition-colors active:bg-[var(--color-fill-quaternary)]"
-          onClick={() => hapticLight()}
-          aria-label={`Time range: ${currentLabel}`}
-        >
-          <Clock className="h-[13px] w-[13px] shrink-0 opacity-60" strokeWidth={2} />
-          <span className="whitespace-nowrap">{currentLabel}</span>
-          <ChevronDown className="h-[10px] w-[10px] shrink-0 opacity-40" strokeWidth={2.5} />
-        </button>
-      </SheetTrigger>
-      <SheetContent
-        side="bottom"
-        className="h-auto max-h-[45vh] rounded-t-[var(--radius-3xl)] bg-[var(--color-bg-grouped)] p-0"
-      >
-        <div className="drag-indicator" />
-        <SheetHeader className="px-[18px] pb-[12px] pt-[14px]">
-          <SheetTitle className="text-[17px] font-semibold tracking-[-0.32px]">Time Range</SheetTitle>
-        </SheetHeader>
-        <div className="mx-[16px] mb-[calc(var(--safe-area-inset-bottom)+16px)] overflow-hidden rounded-[var(--radius-xl)] bg-[var(--color-surface)]">
-          {TIME_WINDOWS.map((tw, index) => (
-            <div key={tw.value}>
-              <button
-                onClick={() => handleChange(tw.value)}
-                className="flex w-full min-h-[48px] items-center justify-between px-[16px] py-[12px] text-left transition-colors duration-[var(--duration-instant)] active:bg-[var(--color-fill-quaternary)]"
-              >
-                <span className="text-[15px] font-medium tracking-[-0.18px] text-[var(--color-text-primary)]">
-                  {tw.label}
-                </span>
-                {value === tw.value && (
-                  <Check className="h-[18px] w-[18px] text-[var(--color-accent)]" strokeWidth={2.5} />
-                )}
-              </button>
-              {index < TIME_WINDOWS.length - 1 && (
-                <div className="ml-[16px] h-[0.5px] bg-[var(--color-separator)]" />
-              )}
-            </div>
-          ))}
-        </div>
-      </SheetContent>
-    </Sheet>
+    <SegmentedControl
+      options={TIME_WINDOW_OPTIONS}
+      value={value}
+      onChange={onChange}
+      compact
+    />
   )
 }
 
@@ -146,12 +110,21 @@ interface SourceFilterProps {
 export function SourceFilter({ sources, selectedIds, onChange }: SourceFilterProps) {
   const [open, setOpen] = useState(false)
 
+  const atLimit = selectedIds.length >= MAX_SOURCE_FILTER
+  const remaining = MAX_SOURCE_FILTER - selectedIds.length
+
   const toggleSource = (id: string) => {
-    hapticLight()
-    if (selectedIds.includes(id)) {
+    const isSelected = selectedIds.includes(id)
+
+    if (isSelected) {
+      hapticLight()
       onChange(selectedIds.filter((s) => s !== id))
-    } else {
+    } else if (!atLimit) {
+      hapticLight()
       onChange([...selectedIds, id])
+    } else {
+      // At limit - provide warning haptic
+      hapticWarning()
     }
   }
 
@@ -191,7 +164,25 @@ export function SourceFilter({ sources, selectedIds, onChange }: SourceFilterPro
         <div className="drag-indicator" />
 
         <SheetHeader className="flex-row items-center justify-between px-[18px] pb-[12px] pt-[14px]">
-          <SheetTitle className="text-[17px] font-semibold tracking-[-0.32px]">Sources</SheetTitle>
+          <div>
+            <SheetTitle className="text-[17px] font-semibold tracking-[-0.32px]">Sources</SheetTitle>
+            {/* Limit indicator */}
+            {selectedIds.length > 0 && (
+              <p className={cn(
+                "mt-[2px] text-[12px] tracking-[-0.04px]",
+                atLimit ? "text-[var(--color-warning)]" : "text-[var(--color-text-tertiary)]"
+              )}>
+                {atLimit ? (
+                  <span className="flex items-center gap-[4px]">
+                    <AlertCircle className="h-[11px] w-[11px]" />
+                    Max {MAX_SOURCE_FILTER} selected
+                  </span>
+                ) : (
+                  `${remaining} more available`
+                )}
+              </p>
+            )}
+          </div>
           {selectedIds.length > 0 && (
             <Button variant="ghost" size="sm" onClick={clearAll} className="text-[var(--color-accent)] font-medium text-[14px]">
               Clear
@@ -200,14 +191,21 @@ export function SourceFilter({ sources, selectedIds, onChange }: SourceFilterPro
         </SheetHeader>
 
         <div className="mx-[16px] mb-[calc(var(--safe-area-inset-bottom)+16px)] overflow-hidden rounded-[var(--radius-xl)] bg-[var(--color-surface)]">
-          <div className="max-h-[calc(55vh-120px)] overflow-y-auto">
+          <div className="max-h-[calc(55vh-140px)] overflow-y-auto">
             {sources.map((source, index) => {
               const isSelected = selectedIds.includes(source.id)
+              const isDisabled = atLimit && !isSelected
               return (
                 <div key={source.id}>
                   <button
                     onClick={() => toggleSource(source.id)}
-                    className="flex w-full min-h-[48px] items-center justify-between px-[16px] py-[12px] text-left transition-colors duration-[var(--duration-instant)] active:bg-[var(--color-fill-quaternary)]"
+                    disabled={isDisabled}
+                    className={cn(
+                      "flex w-full min-h-[48px] items-center justify-between px-[16px] py-[12px] text-left transition-colors duration-[var(--duration-instant)]",
+                      isDisabled
+                        ? "opacity-40 cursor-not-allowed"
+                        : "active:bg-[var(--color-fill-quaternary)]"
+                    )}
                   >
                     <span className="text-[15px] font-medium tracking-[-0.18px] text-[var(--color-text-primary)]">
                       {source.name}

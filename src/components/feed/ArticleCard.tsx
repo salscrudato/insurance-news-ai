@@ -1,11 +1,79 @@
 /**
  * Article Card component for the feed
- * Premium iOS news reader design - tight typography, subtle styling
+ * Premium iOS news reader design following Apple HIG 2026
+ * Features refined typography, smooth image loading, and iOS-native interactions
  */
 
-import { Sparkles } from "lucide-react"
+import { useState, useCallback } from "react"
+import { Sparkles, Newspaper } from "lucide-react"
+import { cn } from "@/lib/utils"
 import type { Article } from "@/types/firestore"
 import type { Timestamp } from "firebase/firestore"
+
+/**
+ * Elegant placeholder for articles without images
+ * Uses a subtle gradient with a centered icon
+ */
+function ImagePlaceholder() {
+  return (
+    <div className="aspect-[1.9/1] w-full flex items-center justify-center bg-gradient-to-br from-[var(--color-fill-tertiary)] via-[var(--color-fill-quaternary)] to-[var(--color-fill-tertiary)]">
+      <div className="flex h-[52px] w-[52px] items-center justify-center rounded-[14px] bg-[var(--color-fill-secondary)]">
+        <Newspaper
+          className="h-[26px] w-[26px] text-[var(--color-text-quaternary)]"
+          strokeWidth={1.5}
+        />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Image with loading state and error fallback
+ * Prevents layout shift during image load with smooth fade-in
+ */
+interface ArticleImageProps {
+  src: string
+  alt?: string
+}
+
+function ArticleImage({ src, alt = "" }: ArticleImageProps) {
+  const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading")
+
+  const handleLoad = useCallback(() => {
+    setStatus("loaded")
+  }, [])
+
+  const handleError = useCallback(() => {
+    setStatus("error")
+  }, [])
+
+  if (status === "error") {
+    return <ImagePlaceholder />
+  }
+
+  return (
+    <div className="relative aspect-[1.9/1] w-full overflow-hidden bg-[var(--color-fill-quaternary)]">
+      {status === "loading" && (
+        <div className="absolute inset-0 skeleton-shimmer" />
+      )}
+      <img
+        src={src}
+        alt={alt}
+        className={cn(
+          "h-full w-full object-cover",
+          "transition-all duration-[var(--duration-normal)] ease-[var(--ease-ios)]",
+          status === "loaded"
+            ? "opacity-100 scale-100"
+            : "opacity-0 scale-[1.02]"
+        )}
+        loading="lazy"
+        decoding="async"
+        onLoad={handleLoad}
+        onError={handleError}
+      />
+    </div>
+  )
+}
 
 interface ArticleCardProps {
   article: Article
@@ -50,43 +118,59 @@ export function ArticleCard({ article, onSelect }: ArticleCardProps) {
           handleClick()
         }
       }}
-      className="content-visibility-auto group cursor-pointer overflow-hidden rounded-[var(--radius-lg)] bg-[var(--color-surface)] shadow-[0_0_0_0.5px_var(--color-separator)] transition-all duration-[var(--duration-fast)] ease-[var(--ease-ios)] active:scale-[0.985] active:bg-[var(--color-fill-quaternary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2"
-    >
-      {/* Image - consistent 2:1 aspect ratio */}
-      {hasImage && article.imageUrl && (
-        <div className="aspect-[2/1] w-full overflow-hidden bg-[var(--color-fill-quaternary)]">
-          <img
-            src={article.imageUrl}
-            alt=""
-            className="h-full w-full object-cover"
-            loading="lazy"
-          />
-        </div>
+      className={cn(
+        "content-visibility-auto group cursor-pointer overflow-hidden",
+        "rounded-[var(--radius-xl)] bg-[var(--color-surface)]",
+        // Refined shadow - subtle card elevation
+        "shadow-[0_0_0_0.5px_var(--color-separator),0_2px_8px_rgba(0,0,0,0.04)]",
+        // Smooth transition
+        "-webkit-tap-highlight-color-transparent",
+        "transition-all duration-[var(--duration-fast)] ease-[var(--ease-ios)]",
+        // Press feedback
+        "active:scale-[0.98] active:shadow-[0_0_0_0.5px_var(--color-separator)]",
+        // Focus state
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2"
       )}
+    >
+      {/* Image with loading state or placeholder */}
+      <div className="relative overflow-hidden">
+        {hasImage && article.imageUrl ? (
+          <ArticleImage src={article.imageUrl} />
+        ) : (
+          <ImagePlaceholder />
+        )}
+      </div>
 
-      {/* Content - consistent padding regardless of image */}
-      <div className={hasImage ? "px-[14px] py-[12px]" : "px-[14px] py-[14px]"}>
-        {/* Meta row: Source · Time · subtle AI indicator */}
-        <div className="mb-[6px] flex items-center gap-[5px]">
-          <span className="text-[12px] font-semibold tracking-[-0.1px] text-[var(--color-text-secondary)]">
+      {/* Content - refined padding and spacing */}
+      <div className="px-[16px] py-[14px] min-w-0">
+        {/* Meta row: Source · Time · AI indicator */}
+        <div className="mb-[8px] flex items-center gap-[6px]">
+          <span className="text-[12px] font-semibold tracking-[-0.08px] text-[var(--color-text-secondary)]">
             {article.sourceName}
           </span>
           <span className="text-[11px] text-[var(--color-text-quaternary)]">·</span>
-          <span className="text-[12px] text-[var(--color-text-tertiary)]">
+          <span className="text-[12px] tracking-[-0.08px] text-[var(--color-text-tertiary)]">
             {formatRelativeTime(article.publishedAt)}
           </span>
+          {/* AI indicator badge - appears when AI summary exists */}
           {hasAI && (
-            <Sparkles className="ml-auto h-[11px] w-[11px] text-[var(--color-text-quaternary)] opacity-70" strokeWidth={2} />
+            <div className="ml-auto flex items-center gap-[3px] rounded-full bg-[var(--color-accent-soft)] px-[6px] py-[2px]">
+              <Sparkles
+                className="h-[10px] w-[10px] text-[var(--color-accent)]"
+                strokeWidth={2.5}
+              />
+              <span className="text-[10px] font-semibold text-[var(--color-accent)]">AI</span>
+            </div>
           )}
         </div>
 
-        {/* Headline */}
-        <h3 className="line-clamp-2 text-[15px] font-semibold leading-[1.33] tracking-[-0.2px] text-[var(--color-text-primary)]">
+        {/* Headline - strong visual hierarchy */}
+        <h3 className="headline-text line-clamp-2 text-[17px] font-semibold leading-[1.28] tracking-[-0.4px] text-[var(--color-text-primary)]">
           {article.title}
         </h3>
 
-        {/* Snippet - always show, keep it tight */}
-        <p className="mt-[6px] line-clamp-2 text-[13px] leading-[1.38] tracking-[-0.08px] text-[var(--color-text-tertiary)]">
+        {/* Snippet - use AI summary if available, otherwise snippet */}
+        <p className="mt-[8px] line-clamp-2 text-[14px] leading-[1.43] tracking-[-0.15px] text-[var(--color-text-secondary)]">
           {article.ai?.tldr ?? article.snippet}
         </p>
       </div>
@@ -94,30 +178,34 @@ export function ArticleCard({ article, onSelect }: ArticleCardProps) {
   )
 }
 
+/**
+ * Skeleton loader for ArticleCard
+ * Matches the exact dimensions and spacing of the real card
+ */
 export function ArticleCardSkeleton() {
   return (
-    <div className="overflow-hidden rounded-[var(--radius-lg)] bg-[var(--color-surface)] shadow-[0_0_0_0.5px_var(--color-separator)]">
+    <div className="overflow-hidden rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[0_0_0_0.5px_var(--color-separator),0_2px_8px_rgba(0,0,0,0.04)]">
       {/* Image skeleton */}
-      <div className="aspect-[2/1] w-full skeleton-shimmer" />
+      <div className="aspect-[1.9/1] w-full skeleton-shimmer" />
 
       {/* Content skeleton */}
-      <div className="px-[14px] py-[12px]">
+      <div className="px-[16px] py-[14px]">
         {/* Meta row */}
-        <div className="mb-[6px] flex items-center gap-[5px]">
-          <div className="h-[11px] w-[60px] rounded-[3px] skeleton-shimmer" />
-          <div className="h-[11px] w-[24px] rounded-[3px] skeleton-shimmer" />
+        <div className="mb-[8px] flex items-center gap-[6px]">
+          <div className="h-[12px] w-[64px] rounded-[4px] skeleton-shimmer" />
+          <div className="h-[12px] w-[28px] rounded-[4px] skeleton-shimmer" />
         </div>
 
         {/* Headline */}
-        <div className="space-y-[5px]">
-          <div className="h-[14px] w-full rounded-[3px] skeleton-shimmer" />
-          <div className="h-[14px] w-[85%] rounded-[3px] skeleton-shimmer" />
+        <div className="space-y-[6px]">
+          <div className="h-[17px] w-full rounded-[4px] skeleton-shimmer" />
+          <div className="h-[17px] w-[80%] rounded-[4px] skeleton-shimmer" />
         </div>
 
         {/* Snippet */}
-        <div className="mt-[6px] space-y-[4px]">
-          <div className="h-[12px] w-full rounded-[3px] skeleton-shimmer" />
-          <div className="h-[12px] w-[70%] rounded-[3px] skeleton-shimmer" />
+        <div className="mt-[8px] space-y-[5px]">
+          <div className="h-[14px] w-full rounded-[4px] skeleton-shimmer" />
+          <div className="h-[14px] w-[65%] rounded-[4px] skeleton-shimmer" />
         </div>
       </div>
     </div>

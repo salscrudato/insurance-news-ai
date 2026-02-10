@@ -3,7 +3,8 @@
  */
 
 import { useState } from "react"
-import { Bookmark as BookmarkIcon, Loader2 } from "lucide-react"
+import { useNavigate } from "react-router-dom"
+import { Bookmark as BookmarkIcon, Loader2, ArrowRight } from "lucide-react"
 import { toast } from "sonner"
 import { doc, getDoc } from "firebase/firestore"
 import { useQuery } from "@tanstack/react-query"
@@ -22,6 +23,7 @@ import { useBookmarks, useToggleBookmark } from "@/lib/hooks"
 import { useAuth } from "@/lib/auth-context"
 import { db } from "@/lib/firebase"
 import { hapticMedium, hapticSuccess, hapticLight } from "@/lib/haptics"
+import { openUrl } from "@/lib/browser"
 import type { Bookmark, Article } from "@/types/firestore"
 
 function formatDate(date: Date): string {
@@ -39,6 +41,39 @@ function BookmarkRowSkeleton() {
         <div className="h-[13px] w-2/5 rounded-[3px] skeleton-shimmer" />
       </div>
       <div className="h-[36px] w-[36px] shrink-0 rounded-full skeleton-shimmer" />
+    </div>
+  )
+}
+
+/**
+ * Polished empty state with CTA
+ */
+function EmptyState({ onBrowseFeed }: { onBrowseFeed: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-[56px] text-center">
+      {/* Icon container with subtle gradient */}
+      <div className="mb-[20px] flex h-[72px] w-[72px] items-center justify-center rounded-[20px] bg-gradient-to-br from-[var(--color-fill-tertiary)] to-[var(--color-fill-secondary)]">
+        <BookmarkIcon className="h-[32px] w-[32px] text-[var(--color-text-tertiary)]" strokeWidth={1.5} />
+      </div>
+
+      {/* Title */}
+      <h3 className="mb-[8px] text-[22px] font-bold tracking-[-0.4px] text-[var(--color-text-primary)]">
+        No Saved Articles
+      </h3>
+
+      {/* Description */}
+      <p className="mb-[24px] max-w-[280px] text-[15px] leading-[1.5] tracking-[-0.16px] text-[var(--color-text-secondary)]">
+        Tap the bookmark icon on any article to save it for later reading.
+      </p>
+
+      {/* CTA Button */}
+      <button
+        onClick={onBrowseFeed}
+        className="group flex items-center gap-[8px] rounded-full bg-[var(--color-accent)] px-[24px] py-[14px] text-[16px] font-semibold text-white shadow-[0_2px_12px_rgba(10,132,255,0.3)] transition-all duration-200 active:scale-[0.96] active:shadow-[0_1px_6px_rgba(10,132,255,0.2)]"
+      >
+        <span>Browse Feed</span>
+        <ArrowRight className="h-[18px] w-[18px] transition-transform duration-200 group-hover:translate-x-[2px]" strokeWidth={2} />
+      </button>
     </div>
   )
 }
@@ -94,6 +129,7 @@ function BookmarkRow({ bookmark, onSelect, onRemove, isRemoving }: BookmarkRowPr
 }
 
 export function BookmarksPage() {
+  const navigate = useNavigate()
   const { isLoading: authLoading } = useAuth()
   const { data: bookmarks, isLoading: bookmarksLoading } = useBookmarks()
   const toggleBookmark = useToggleBookmark()
@@ -183,7 +219,8 @@ export function BookmarksPage() {
 
   const handleOpenArticle = () => {
     if (selectedBookmark) {
-      window.open(selectedBookmark.url, "_blank", "noopener,noreferrer")
+      hapticMedium()
+      openUrl(selectedBookmark.url)
     }
   }
 
@@ -215,27 +252,10 @@ export function BookmarksPage() {
 
       {/* Empty state */}
       {!isLoading && (!bookmarks || bookmarks.length === 0) && (
-        <div className="flex flex-col items-center justify-center py-[48px] text-center">
-          {/* Icon */}
-          <div className="mb-[16px] flex h-[60px] w-[60px] items-center justify-center rounded-[18px] bg-[var(--color-fill-tertiary)]">
-            <BookmarkIcon className="h-[26px] w-[26px] text-[var(--color-text-tertiary)]" strokeWidth={1.5} />
-          </div>
-
-          {/* Title */}
-          <h3 className="mb-[6px] text-[20px] font-semibold tracking-[-0.4px] text-[var(--color-text-primary)]">
-            Save for later
-          </h3>
-
-          {/* Description */}
-          <p className="max-w-[260px] text-[15px] leading-[1.45] tracking-[-0.16px] text-[var(--color-text-secondary)]">
-            Tap the bookmark icon on any article to build your reading list.
-          </p>
-
-          {/* Hint */}
-          <p className="mt-[14px] text-[13px] tracking-[-0.08px] text-[var(--color-text-tertiary)]">
-            Browse the Feed to discover articles
-          </p>
-        </div>
+        <EmptyState onBrowseFeed={() => {
+          hapticMedium()
+          navigate("/feed")
+        }} />
       )}
 
       {/* Bookmarks list */}

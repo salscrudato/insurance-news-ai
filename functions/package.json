@@ -11,6 +11,7 @@
     "logs": "firebase functions:log",
     "seed-sources": "npm run build && node lib/scripts/seed-sources.js",
     "backfill": "npm run build && node lib/scripts/backfill-and-brief.js",
+    "backfill-embeddings": "npm run build && node lib/scripts/backfill-embeddings.js",
     "check-data": "npm run build && node lib/scripts/check-data.js",
     "show-brief": "npm run build && node lib/scripts/show-brief.js",
     "regenerate-brief": "npm run build && node lib/scripts/regenerate-brief.js"

@@ -11,6 +11,7 @@ export type {
   // Article types
   Article,
   ArticleAI,
+  ArticleEmbedding,
   // Brief types
   Brief,
   BriefTopStory,
@@ -20,5 +21,12 @@ export type {
   UserProfile,
   Bookmark,
   UserPreferences,
+  // Chat types
+  ChatTimeScope,
+  ChatSourceFilter,
+  ChatCategory,
+  ChatCitation,
+  ChatThread,
+  ChatMessage,
 } from "./firestore.js";
 

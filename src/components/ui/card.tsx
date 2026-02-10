@@ -4,27 +4,80 @@ import { cn } from "@/lib/utils"
 
 /**
  * Card - Unified surface component with iOS-style variants
+ * Following Apple HIG 2026 with refined shadows and interactions
  *
  * Variants:
  * - default: Standard card with subtle shadow (for content cards)
  * - grouped: iOS Settings-style grouped list container
  * - interactive: Card that responds to press/hover (for tappable items)
- * - elevated: Slightly more prominent shadow
+ * - elevated: More prominent shadow for floating elements
+ * - outline: Bordered card without shadow
+ * - filled: Subtle background fill without shadow
+ * - glass: Frosted glass effect for overlays
  */
 const cardVariants = cva(
-  "overflow-hidden bg-[var(--color-surface)]",
+  [
+    "overflow-hidden",
+    "bg-[var(--color-surface)]",
+  ].join(" "),
   {
     variants: {
       variant: {
-        default: "rounded-[16px] shadow-[0_1px_3px_rgba(0,0,0,0.04),0_0_0_0.5px_rgba(0,0,0,0.02)]",
-        grouped: "rounded-[var(--radius-xl)] shadow-[0_0.5px_1px_rgba(0,0,0,0.04),0_0_0_0.5px_rgba(0,0,0,0.015)]",
-        interactive: "rounded-[16px] shadow-[0_1px_3px_rgba(0,0,0,0.04),0_0_0_0.5px_rgba(0,0,0,0.02)] transition-all duration-[var(--duration-fast)] ease-[var(--ease-ios)] cursor-pointer active:scale-[0.985] active:bg-[var(--color-fill-quaternary)]",
-        elevated: "rounded-[16px] shadow-[var(--shadow-md)]",
-        outline: "rounded-[var(--radius-lg)] border border-[var(--color-separator)]",
+        // Default - subtle shadow, standard corners
+        default: [
+          "rounded-[var(--radius-2xl)]",
+          "shadow-[var(--shadow-card)]",
+        ].join(" "),
+        // Grouped - iOS Settings-style container
+        grouped: [
+          "rounded-[var(--radius-xl)]",
+          "shadow-[0_0.5px_1px_rgba(0,0,0,0.05)]",
+        ].join(" "),
+        // Interactive - responds to touch
+        interactive: [
+          "rounded-[var(--radius-2xl)]",
+          "shadow-[var(--shadow-card)]",
+          "transition-all duration-[var(--duration-fast)] ease-[var(--ease-ios)]",
+          "cursor-pointer",
+          "-webkit-tap-highlight-color-transparent",
+          "hover:shadow-[var(--shadow-card-elevated)]",
+          "active:scale-[0.985] active:bg-[var(--color-fill-quaternary)] active:shadow-[var(--shadow-card-active)]",
+        ].join(" "),
+        // Elevated - floating appearance
+        elevated: [
+          "rounded-[var(--radius-2xl)]",
+          "shadow-[var(--shadow-card-elevated)]",
+        ].join(" "),
+        // Outline - bordered without shadow
+        outline: [
+          "rounded-[var(--radius-lg)]",
+          "border border-[var(--color-separator-opaque)]",
+          "shadow-none",
+        ].join(" "),
+        // Filled - subtle background, no shadow
+        filled: [
+          "rounded-[var(--radius-lg)]",
+          "bg-[var(--color-fill-quaternary)]",
+          "shadow-none",
+        ].join(" "),
+        // Glass - frosted glass effect
+        glass: [
+          "rounded-[var(--radius-2xl)]",
+          "glass-card",
+          "border border-[rgba(255,255,255,0.4)]",
+          "shadow-[var(--shadow-md)]",
+        ].join(" "),
+      },
+      padding: {
+        none: "",
+        sm: "p-[12px]",
+        default: "p-[16px]",
+        lg: "p-[20px]",
       },
     },
     defaultVariants: {
       variant: "default",
+      padding: "none",
     },
   }
 )
@@ -34,10 +87,10 @@ export interface CardProps
     VariantProps<typeof cardVariants> {}
 
 const Card = React.forwardRef<HTMLDivElement, CardProps>(
-  ({ className, variant, ...props }, ref) => (
+  ({ className, variant, padding, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn(cardVariants({ variant }), className)}
+      className={cn(cardVariants({ variant, padding }), className)}
       {...props}
     />
   )

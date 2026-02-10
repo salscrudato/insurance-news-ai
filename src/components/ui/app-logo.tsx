@@ -1,11 +1,10 @@
 /**
  * AppLogo - Shield logo component with gradient
- * 
- * Derived from public/logo.svg - a gradient shield representing
- * protection and trust in the insurance industry.
- * 
- * The gradient flows from deep navy (#0A2A45) through ocean blue (#0D3A66)
- * to bright cyan (#35D3FF), symbolizing depth, stability, and innovation.
+ *
+ * Clean, modern shield representing protection and trust.
+ *
+ * The gradient flows from deep blue (#0055D4) through accent blue (#0A84FF)
+ * to sky blue (#5AC8FA), creating a refined, Apple-inspired appearance.
  */
 
 import { cn } from "@/lib/utils"
@@ -49,24 +48,24 @@ export function AppLogo({
       xmlns="http://www.w3.org/2000/svg"
       className={cn(
         "shrink-0",
-        glow && "drop-shadow-[0_2px_8px_rgba(53,211,255,0.35)]",
+        glow && "drop-shadow-[0_2px_8px_rgba(10,132,255,0.35)]",
         rounded && "rounded-[22%]",
         className
       )}
       aria-label="P&C Brief logo"
     >
       <defs>
-        <linearGradient 
-          id={gradientId} 
-          x1="260" 
-          y1="180" 
-          x2="780" 
-          y2="920" 
+        <linearGradient
+          id={gradientId}
+          x1="260"
+          y1="180"
+          x2="780"
+          y2="920"
           gradientUnits="userSpaceOnUse"
         >
-          <stop offset="0%" stopColor="#0A2A45" />
-          <stop offset="55%" stopColor="#0D3A66" />
-          <stop offset="100%" stopColor="#35D3FF" />
+          <stop offset="0%" stopColor="#0055D4" />
+          <stop offset="50%" stopColor="#0A84FF" />
+          <stop offset="100%" stopColor="#5AC8FA" />
         </linearGradient>
       </defs>
       
@@ -110,17 +109,17 @@ export function AppLogoMark({
       aria-label="P&C Brief"
     >
       <defs>
-        <linearGradient 
-          id={gradientId} 
-          x1="260" 
-          y1="180" 
-          x2="780" 
-          y2="920" 
+        <linearGradient
+          id={gradientId}
+          x1="260"
+          y1="180"
+          x2="780"
+          y2="920"
           gradientUnits="userSpaceOnUse"
         >
-          <stop offset="0%" stopColor="#0A2A45" />
-          <stop offset="55%" stopColor="#0D3A66" />
-          <stop offset="100%" stopColor="#35D3FF" />
+          <stop offset="0%" stopColor="#0055D4" />
+          <stop offset="50%" stopColor="#0A84FF" />
+          <stop offset="100%" stopColor="#5AC8FA" />
         </linearGradient>
       </defs>
       

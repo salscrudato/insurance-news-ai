@@ -105,6 +105,24 @@ export interface Article {
   isRelevant: boolean;
   /** AI-generated content (cached, generated on first request) */
   ai: ArticleAI | null;
+  /** Vector embedding for semantic search (optional, computed on-demand) */
+  embedding?: ArticleEmbedding;
+  /** Search tokens for lexical narrowing (optional, computed at ingest) */
+  searchTokens?: string[];
+}
+
+/**
+ * Vector embedding for an article
+ */
+export interface ArticleEmbedding {
+  /** Number of dimensions in the vector */
+  dims: number;
+  /** The embedding vector */
+  vector: number[];
+  /** Model used to generate the embedding */
+  model: string;
+  /** When the embedding was generated */
+  updatedAt: Timestamp;
 }
 
 /**
@@ -231,5 +249,64 @@ export interface UserPreferences {
   };
   /** Last updated timestamp */
   updatedAt: Timestamp;
+}
+
+// ============================================================================
+// Chat Threads Subcollection: users/{uid}/chatThreads/{threadId}
+// ============================================================================
+
+/** Time scope for chat queries */
+export type ChatTimeScope = "today" | "7d" | "30d";
+
+/** Source filter mode */
+export type ChatSourceFilter = "all" | "selected";
+
+/** Category filter for chat */
+export type ChatCategory = "all" | "property" | "casualty" | "regulation" | "claims" | "reinsurance";
+
+/** Citation reference in a chat message */
+export interface ChatCitation {
+  /** Article ID reference */
+  articleId: string;
+  /** Article title */
+  title: string;
+  /** Source name */
+  sourceName: string;
+  /** Article URL */
+  url: string;
+  /** Publication timestamp (ISO string for serialization) */
+  publishedAt: string;
+}
+
+/** Chat thread document */
+export interface ChatThread {
+  /** Thread ID (document ID) */
+  id: string;
+  /** Thread title (auto-generated from first message or user-set) */
+  title: string;
+  /** When thread was created */
+  createdAt: Timestamp;
+  /** When thread was last updated */
+  updatedAt: Timestamp;
+  /** Time scope filter */
+  scope: ChatTimeScope;
+  /** Source filter mode */
+  sourceFilter: ChatSourceFilter;
+  /** Category filter */
+  category: ChatCategory;
+}
+
+/** Chat message document */
+export interface ChatMessage {
+  /** Message ID (document ID) */
+  id: string;
+  /** Message role */
+  role: "user" | "assistant";
+  /** Message content */
+  content: string;
+  /** When message was created */
+  createdAt: Timestamp;
+  /** Citations (only for assistant messages) */
+  citations?: ChatCitation[];
 }
 

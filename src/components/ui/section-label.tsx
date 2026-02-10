@@ -21,11 +21,10 @@ const SectionLabel = React.forwardRef<HTMLDivElement, SectionLabelProps>(
     <div
       ref={ref}
       className={cn(
-        "flex items-center gap-[8px] text-[13px] font-semibold uppercase tracking-[0.02em] text-[var(--color-text-secondary)]",
+        "flex items-center gap-[8px] text-[13px] font-medium tracking-[-0.08px] text-[var(--color-text-tertiary)]",
         inset && "pl-[16px]",
         className
       )}
-      style={{ opacity: 0.6 }}
       {...props}
     >
       {Icon && <Icon className="h-[14px] w-[14px]" strokeWidth={2} />}

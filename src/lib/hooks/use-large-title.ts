@@ -1,11 +1,14 @@
 /**
  * useLargeTitle - Hook for iOS-style large title collapse behavior
- * 
+ *
  * Uses IntersectionObserver to track when the large title element
  * scrolls out of view, enabling the collapsed title in TopNav.
  */
 
 import { useRef, useState, useEffect, type RefObject } from "react"
+
+// Nav bar height (44px) - must match TopNav component
+const NAV_HEIGHT = 44
 
 interface UseLargeTitleResult {
   /** Ref to attach to the large title container element */
@@ -16,7 +19,7 @@ interface UseLargeTitleResult {
 
 /**
  * Track large title visibility for iOS-style collapse behavior
- * 
+ *
  * @param threshold - Visibility threshold (0-1). Default 0.1 means title is considered
  *                    "not visible" when less than 10% is showing
  * @returns titleRef to attach to large title element, and isVisible state
@@ -29,6 +32,14 @@ export function useLargeTitle(threshold = 0.1): UseLargeTitleResult {
     const element = titleRef.current
     if (!element) return
 
+    // Get safe area inset for accurate rootMargin calculation
+    const safeAreaTop = parseInt(
+      getComputedStyle(document.documentElement).getPropertyValue('--safe-area-top') || '0',
+      10
+    ) || 0
+
+    const topOffset = NAV_HEIGHT + safeAreaTop
+
     const observer = new IntersectionObserver(
       (entries) => {
         // The title is considered visible if it's intersecting above threshold
@@ -40,9 +51,9 @@ export function useLargeTitle(threshold = 0.1): UseLargeTitleResult {
       {
         // Use the viewport as root
         root: null,
-        // Account for sticky header height (52px) + safe area
+        // Account for sticky header height + safe area
         // We observe when the title hits the bottom of the header
-        rootMargin: "-52px 0px 0px 0px",
+        rootMargin: `-${topOffset}px 0px 0px 0px`,
         threshold,
       }
     )
@@ -76,6 +87,14 @@ export function useLargeTitleWithScroll(
     const scrollContainer = scrollContainerRef.current
     if (!element || !scrollContainer) return
 
+    // Get safe area inset for accurate rootMargin calculation
+    const safeAreaTop = parseInt(
+      getComputedStyle(document.documentElement).getPropertyValue('--safe-area-top') || '0',
+      10
+    ) || 0
+
+    const topOffset = NAV_HEIGHT + safeAreaTop
+
     const observer = new IntersectionObserver(
       (entries) => {
         const entry = entries[0]
@@ -85,7 +104,7 @@ export function useLargeTitleWithScroll(
       },
       {
         root: scrollContainer,
-        rootMargin: "-52px 0px 0px 0px",
+        rootMargin: `-${topOffset}px 0px 0px 0px`,
         threshold,
       }
     )

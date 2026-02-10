@@ -1,21 +1,55 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="g" x1="260" y1="180" x2="780" y2="920" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#0A2A45"/>
-      <stop offset="55%" stop-color="#0D3A66"/>
-      <stop offset="100%" stop-color="#35D3FF"/>
+    <!-- Primary gradient - refined Apple-style blue -->
+    <linearGradient id="shieldGradient" x1="512" y1="120" x2="512" y2="920" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="100%" stop-color="#1D4ED8"/>
     </linearGradient>
+
+    <!-- Subtle top highlight for depth -->
+    <linearGradient id="highlightGradient" x1="512" y1="120" x2="512" y2="500" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.25)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+    </linearGradient>
+
+    <!-- Inner glow effect -->
+    <radialGradient id="innerGlow" cx="50%" cy="30%" r="60%" gradientUnits="objectBoundingBox">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.15)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+    </radialGradient>
   </defs>
 
-  <!-- Simple gradient shield (no text, no inner details) -->
-  <path d="M512 176
-           C654 176 776 248 776 380
-           V556
-           C776 702 654 824 512 904
-           C370 824 248 702 248 556
-           V380
-           C248 248 370 176 512 176
+  <!-- Modern shield shape - refined curves -->
+  <path id="shield" d="M512 120
+           C512 120 280 120 280 320
+           L280 480
+           C280 680 512 880 512 880
+           C512 880 744 680 744 480
+           L744 320
+           C744 120 512 120 512 120
            Z"
-        fill="url(#g)"/>
+        fill="url(#shieldGradient)"/>
+
+  <!-- Highlight overlay for Apple-style depth -->
+  <path d="M512 120
+           C512 120 280 120 280 320
+           L280 480
+           C280 680 512 880 512 880
+           C512 880 744 680 744 480
+           L744 320
+           C744 120 512 120 512 120
+           Z"
+        fill="url(#highlightGradient)"/>
+
+  <!-- Subtle inner glow -->
+  <path d="M512 120
+           C512 120 280 120 280 320
+           L280 480
+           C280 680 512 880 512 880
+           C512 880 744 680 744 480
+           L744 320
+           C744 120 512 120 512 120
+           Z"
+        fill="url(#innerGlow)"/>
 </svg>

@@ -7,53 +7,56 @@
     "Helvetica Neue", "Segoe UI", Roboto, system-ui, sans-serif;
   --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display",
     "Helvetica Neue", "Segoe UI", Roboto, system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-  /* Colors - Light mode (iOS 18+ / visionOS 2026 refined palette) */
+  /* ===== Clean Blue Accent System (Apple HIG 2026) ===== */
+  /* Backgrounds - Pure, minimal whites and off-whites */
   --color-background: #FFFFFF;
   --color-bg-grouped: #F2F2F7;
-  --color-bg-grouped-secondary: #EFEFF4;
-  --color-bg-subtle: #FAFAFA;
+  --color-bg-grouped-secondary: #E5E5EA;
+  --color-bg-subtle: #FAFAFC;
   --color-surface: #FFFFFF;
   --color-surface-elevated: #FFFFFF;
   --color-surface-secondary: #F9F9FB;
-  --color-surface-tertiary: #F5F5F7;
-  --color-border: rgba(0, 0, 0, 0.04);
-  --color-border-strong: rgba(0, 0, 0, 0.06);
-  --color-separator: rgba(60, 60, 67, 0.08);
+  --color-surface-tertiary: #F2F2F7;
+
+  /* Borders & Separators - Ultra subtle, refined opacity */
+  --color-border: rgba(0, 0, 0, 0.05);
+  --color-border-strong: rgba(0, 0, 0, 0.08);
+  --color-separator: rgba(60, 60, 67, 0.12);
   --color-separator-opaque: #E5E5EA;
-  --color-text-primary: #1D1D1F;
-  --color-text-secondary: rgba(60, 60, 67, 0.68);
-  --color-text-tertiary: rgba(60, 60, 67, 0.42);
-  --color-text-quaternary: rgba(60, 60, 67, 0.28);
+  --color-separator-light: rgba(60, 60, 67, 0.06);
+
+  /* Text Hierarchy - Refined contrast for better readability */
+  --color-text-primary: #1C1C1E;
+  --color-text-secondary: rgba(60, 60, 67, 0.72);
+  --color-text-tertiary: rgba(60, 60, 67, 0.48);
+  --color-text-quaternary: rgba(60, 60, 67, 0.30);
+  --color-text-placeholder: rgba(60, 60, 67, 0.35);
+
+  /* Primary Accent - Refined Apple Blue (iOS 18) */
   --color-accent: #007AFF;
-  --color-accent-soft: rgba(0, 122, 255, 0.12);
+  --color-accent-soft: rgba(0, 122, 255, 0.14);
   --color-accent-hover: #0066D6;
   --color-accent-pressed: #0055B3;
+  --color-accent-muted: rgba(0, 122, 255, 0.60);
+  --color-accent-vibrant: #0A84FF;
+
+  /* Semantic Colors - Refined for better contrast */
   --color-destructive: #FF3B30;
-  --color-destructive-soft: rgba(255, 59, 48, 0.12);
+  --color-destructive-soft: rgba(255, 59, 48, 0.14);
   --color-success: #34C759;
-  --color-success-soft: rgba(52, 199, 89, 0.12);
+  --color-success-soft: rgba(52, 199, 89, 0.14);
   --color-warning: #FF9500;
-  --color-warning-soft: rgba(255, 149, 0, 0.12);
-  --color-purple: #AF52DE;
-  --color-purple-soft: rgba(175, 82, 222, 0.12);
-  --color-orange: #FF9500;
-  --color-orange-soft: rgba(255, 149, 0, 0.12);
-  --color-red: #FF3B30;
-  --color-teal: #5AC8FA;
-  --color-teal-soft: rgba(90, 200, 250, 0.12);
-  --color-indigo: #5856D6;
-  --color-indigo-soft: rgba(88, 86, 214, 0.12);
-  --color-pink: #FF2D55;
-  --color-pink-soft: rgba(255, 45, 85, 0.12);
-  --color-cyan: #32ADE6;
-  --color-cyan-soft: rgba(50, 173, 230, 0.12);
-  --color-mint: #00C7BE;
-  --color-mint-soft: rgba(0, 199, 190, 0.12);
-  --color-fill-primary: rgba(120, 120, 128, 0.16);
-  --color-fill-secondary: rgba(120, 120, 128, 0.12);
-  --color-fill-tertiary: rgba(120, 120, 128, 0.08);
-  --color-fill-quaternary: rgba(120, 120, 128, 0.04);
+  --color-warning-soft: rgba(255, 149, 0, 0.14);
+  --color-info: #5856D6;
+  --color-info-soft: rgba(88, 86, 214, 0.14);
+
+  /* Fill Colors - Neutral grays for UI elements (refined opacity) */
+  --color-fill-primary: rgba(120, 120, 128, 0.20);
+  --color-fill-secondary: rgba(120, 120, 128, 0.14);
+  --color-fill-tertiary: rgba(120, 120, 128, 0.10);
+  --color-fill-quaternary: rgba(120, 120, 128, 0.06);
 
   /* Spacing - iOS-inspired rhythm (4pt base with enhanced scale) */
   --spacing-0: 0px;
@@ -89,23 +92,31 @@
   --radius-4xl: 28px;
   --radius-full: 9999px;
 
-  /* Shadows - refined iOS-style with natural depth (2026 ultra-subtle) */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.03);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.02);
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.03);
-  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.03);
-  --shadow-xl: 0 8px 28px rgba(0, 0, 0, 0.10), 0 4px 8px rgba(0, 0, 0, 0.04);
-  --shadow-2xl: 0 16px 48px rgba(0, 0, 0, 0.14), 0 6px 16px rgba(0, 0, 0, 0.06);
-  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
-  --shadow-card-hover: 0 6px 20px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.03);
-  --shadow-card-active: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-button: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 1px rgba(0, 0, 0, 0.04);
-  --shadow-button-active: 0 1px 1px rgba(0, 0, 0, 0.04);
-  --shadow-inset: inset 0 1px 2px rgba(0, 0, 0, 0.03);
-  --shadow-up-sm: 0 -1px 3px rgba(0, 0, 0, 0.05);
-  --shadow-up-lg: 0 -4px 16px rgba(0, 0, 0, 0.08);
-  --shadow-sheet: 0 -8px 32px rgba(0, 0, 0, 0.12), 0 -2px 8px rgba(0, 0, 0, 0.04);
-  --shadow-nav: 0 1px 0 rgba(0, 0, 0, 0.04);
+  /* Shadows - refined iOS-style with natural depth (Apple HIG 2026) */
+  /* Ultra-subtle shadows for modern, flat aesthetic with depth hints */
+  --shadow-xs: 0 0.5px 1px rgba(0, 0, 0, 0.04), 0 0.5px 0.5px rgba(0, 0, 0, 0.02);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06), 0 0.5px 1px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.10), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --shadow-xl: 0 8px 24px rgba(0, 0, 0, 0.12), 0 4px 8px rgba(0, 0, 0, 0.06);
+  --shadow-2xl: 0 16px 40px rgba(0, 0, 0, 0.16), 0 6px 12px rgba(0, 0, 0, 0.08);
+
+  /* Semantic shadows */
+  --shadow-card: 0 0.5px 1px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-card-elevated: 0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.10), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --shadow-card-active: 0 0.5px 1px rgba(0, 0, 0, 0.04);
+  --shadow-button: 0 1px 2px rgba(0, 0, 0, 0.08), 0 0.5px 1px rgba(0, 0, 0, 0.04);
+  --shadow-button-hover: 0 2px 4px rgba(0, 0, 0, 0.10), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-button-active: 0 0.5px 1px rgba(0, 0, 0, 0.06);
+  --shadow-inset: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-focus: 0 0 0 4px var(--color-accent-soft);
+
+  /* Directional shadows */
+  --shadow-up-sm: 0 -1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-up-lg: 0 -4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-sheet: 0 -6px 24px rgba(0, 0, 0, 0.12), 0 -1px 4px rgba(0, 0, 0, 0.06);
+  --shadow-nav: 0 0.5px 0 rgba(0, 0, 0, 0.06);
 
   /* Blur - frosted glass effects */
   --blur-xs: 4px;
@@ -123,19 +134,30 @@
   --safe-area-inset-left: env(safe-area-inset-left, 0px);
 
   /* Animation - Apple-tuned curves with refined timing (iOS 18 / 2026) */
-  --duration-instant: 100ms;
-  --duration-fast: 180ms;
-  --duration-normal: 250ms;
-  --duration-slow: 350ms;
-  --duration-slower: 450ms;
-  --duration-sheet: 400ms;
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in: cubic-bezier(0.7, 0, 1, 0.5);
-  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
-  --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.175);
-  --ease-ios: cubic-bezier(0.25, 0.1, 0.25, 1);
-  --ease-ios-spring: cubic-bezier(0.16, 1.11, 0.3, 1.02);
-  --ease-bounce: cubic-bezier(0.34, 1.4, 0.64, 1);
+  /* Duration scale - slightly faster for snappier feel */
+  --duration-instant: 80ms;
+  --duration-fast: 150ms;
+  --duration-normal: 220ms;
+  --duration-slow: 320ms;
+  --duration-slower: 420ms;
+  --duration-sheet: 380ms;
+
+  /* Easing curves - refined for natural iOS motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.64, 0, 0.78, 0);
+  --ease-in-out: cubic-bezier(0.45, 0, 0.55, 1);
+  --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.1);
+  --ease-ios: cubic-bezier(0.28, 0.11, 0.32, 1);
+  --ease-ios-spring: cubic-bezier(0.23, 1.1, 0.32, 1);
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Layout */
+  --nav-height: 44px;
+  --nav-height-large: 96px;
+  --tap-target-min: 44px;
+  --content-max-width: 428px;
+  --page-padding-x: 20px;
 }
 
 /* ===== Base Styles ===== */
@@ -265,17 +287,25 @@ body {
   color: var(--color-text-tertiary);
 }
 
-/* ===== Focus States ===== */
+/* ===== Focus States (Apple HIG Compliant) ===== */
 :focus-visible {
-  outline: 3px solid var(--color-accent-soft);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--shadow-focus);
 }
 
 button:focus-visible,
 a:focus-visible,
-[role="button"]:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+[role="button"]:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-accent-soft), 0 0 0 1px var(--color-accent);
+}
+
+/* Interactive element focus ring */
+.focus-ring-inset:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--color-accent);
 }
 
 /* ===== Reduced Motion ===== */
@@ -313,40 +343,49 @@ a:focus-visible,
 }
 
 /* Glass morphism effects - refined for iOS 18 / 2026 aesthetic */
+/* Uses vibrancy-style saturation boost for iOS-native feel */
 .glass {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: saturate(180%) blur(var(--blur-xl));
-  -webkit-backdrop-filter: saturate(180%) blur(var(--blur-xl));
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: saturate(200%) blur(40px);
+  -webkit-backdrop-filter: saturate(200%) blur(40px);
 }
 
 .glass-subtle {
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: saturate(150%) blur(var(--blur-lg));
-  -webkit-backdrop-filter: saturate(150%) blur(var(--blur-lg));
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: saturate(180%) blur(24px);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
 }
 
 .glass-solid {
-  background: rgba(255, 255, 255, 0.98);
-  backdrop-filter: saturate(140%) blur(var(--blur-md));
-  -webkit-backdrop-filter: saturate(140%) blur(var(--blur-md));
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: saturate(160%) blur(16px);
+  -webkit-backdrop-filter: saturate(160%) blur(16px);
 }
 
 .glass-sheet {
-  background: rgba(255, 255, 255, 0.98);
-  backdrop-filter: saturate(180%) blur(var(--blur-3xl));
-  -webkit-backdrop-filter: saturate(180%) blur(var(--blur-3xl));
+  background: rgba(255, 255, 255, 0.97);
+  backdrop-filter: saturate(200%) blur(60px);
+  -webkit-backdrop-filter: saturate(200%) blur(60px);
 }
 
 .glass-nav {
-  background: rgba(255, 255, 255, 0.94);
-  backdrop-filter: saturate(180%) blur(28px);
-  -webkit-backdrop-filter: saturate(180%) blur(28px);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: saturate(200%) blur(32px);
+  -webkit-backdrop-filter: saturate(200%) blur(32px);
+  border-bottom: 0.5px solid rgba(0, 0, 0, 0.06);
 }
 
 .glass-card {
-  background: rgba(255, 255, 255, 0.90);
-  backdrop-filter: saturate(160%) blur(var(--blur-lg));
-  -webkit-backdrop-filter: saturate(160%) blur(var(--blur-lg));
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+
+/* Ultra-thin material - for overlays */
+.glass-ultra-thin {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: saturate(220%) blur(48px);
+  -webkit-backdrop-filter: saturate(220%) blur(48px);
 }
 
 /* Hide scrollbar for carousel elements */
@@ -386,26 +425,43 @@ a:focus-visible,
   overscroll-behavior: contain;
 }
 
-/* Skeleton animation - ultra-smooth, subtle */
+/* Skeleton animation - ultra-smooth, subtle wave effect */
 @keyframes shimmer {
   0% {
-    background-position: -200% 0;
+    background-position: -100% 0;
   }
   100% {
-    background-position: 200% 0;
+    background-position: 100% 0;
   }
 }
 
-.skeleton-shimmer {
+.skeleton-shimmer,
+.skeleton {
   background: linear-gradient(
     90deg,
-    rgba(120, 120, 128, 0.08) 0%,
-    rgba(120, 120, 128, 0.04) 50%,
-    rgba(120, 120, 128, 0.08) 100%
+    rgba(120, 120, 128, 0.10) 0%,
+    rgba(120, 120, 128, 0.16) 20%,
+    rgba(120, 120, 128, 0.10) 40%,
+    rgba(120, 120, 128, 0.10) 100%
   );
-  background-size: 200% 100%;
-  animation: shimmer 1.8s ease-in-out infinite;
+  background-size: 250% 100%;
+  animation: shimmer 1.6s var(--ease-smooth) infinite;
   border-radius: var(--radius-sm);
+}
+
+/* Skeleton variants */
+.skeleton-text {
+  height: 14px;
+  border-radius: 4px;
+}
+
+.skeleton-heading {
+  height: 20px;
+  border-radius: 6px;
+}
+
+.skeleton-image {
+  border-radius: var(--radius-lg);
 }
 
 /* Pulse animation for subtle loading states */
@@ -414,12 +470,12 @@ a:focus-visible,
     opacity: 1;
   }
   50% {
-    opacity: 0.6;
+    opacity: 0.5;
   }
 }
 
 .animate-subtle-pulse {
-  animation: subtle-pulse 2s ease-in-out infinite;
+  animation: subtle-pulse 1.8s var(--ease-smooth) infinite;
 }
 
 /* Note: card-surface, card-surface-interactive, grouped-container
@@ -467,9 +523,20 @@ a:focus-visible,
 .drag-indicator {
   width: 36px;
   height: 5px;
-  border-radius: 100px;
-  background-color: rgba(60, 60, 67, 0.20);
-  margin: 8px auto 0;
+  border-radius: 2.5px;
+  background-color: rgba(60, 60, 67, 0.28);
+  margin: 6px auto 0;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+/* Smaller drag indicator variant */
+.drag-indicator-sm {
+  width: 32px;
+  height: 4px;
+  border-radius: 2px;
+  background-color: rgba(60, 60, 67, 0.24);
+  margin: 6px auto 0;
   flex-shrink: 0;
 }
 
@@ -508,25 +575,43 @@ a:focus-visible,
   box-shadow: var(--shadow-xs);
 }
 
-/* Input field styling */
+/* Input field styling - iOS native feel */
 .input-field {
-  height: 40px;
-  padding: 0 14px;
-  font-size: 16px;
+  height: 44px;
+  padding: 0 16px;
+  font-size: 17px;
+  font-weight: 400;
+  letter-spacing: -0.4px;
   background-color: var(--color-fill-tertiary);
   border-radius: var(--radius-lg);
-  border: none;
+  border: 1px solid transparent;
   color: var(--color-text-primary);
-  transition: box-shadow var(--duration-fast) var(--ease-ios);
+  transition: all var(--duration-fast) var(--ease-ios);
 }
 
 .input-field::placeholder {
-  color: var(--color-text-tertiary);
+  color: var(--color-text-placeholder);
+}
+
+.input-field:hover:not(:focus) {
+  background-color: var(--color-fill-secondary);
 }
 
 .input-field:focus {
   outline: none;
+  background-color: var(--color-surface);
+  border-color: var(--color-accent);
   box-shadow: 0 0 0 3px var(--color-accent-soft);
+}
+
+/* Search input variant */
+.input-search {
+  height: 36px;
+  padding: 0 12px 0 36px;
+  font-size: 16px;
+  background-color: var(--color-fill-tertiary);
+  border-radius: var(--radius-md);
+  border: none;
 }
 
 /* Pill tag style - for topics, categories */
@@ -615,7 +700,7 @@ a:focus-visible,
 
 /* Accent gradient for branded elements */
 .accent-gradient {
-  background: linear-gradient(135deg, var(--color-accent) 0%, #5856D6 100%);
+  background: linear-gradient(135deg, var(--color-accent) 0%, #0055D4 100%);
 }
 
 /* Subtle inner shadow for inputs */
@@ -669,7 +754,7 @@ a:focus-visible,
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #007AFF 0%, #5856D6 100%);
+  background: var(--color-accent);
   flex-shrink: 0;
 }
 
@@ -698,4 +783,107 @@ a:focus-visible,
 
 .scroll-shadow-bottom {
   box-shadow: inset 0 -12px 8px -8px rgba(0, 0, 0, 0.04);
+}
+
+/* ===== Enhanced Interaction States ===== */
+
+/* Tappable element - subtle highlight on touch */
+.tappable {
+  transition: background-color var(--duration-instant) var(--ease-out),
+              transform var(--duration-fast) var(--ease-ios);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tappable:active {
+  background-color: var(--color-fill-quaternary);
+}
+
+/* Pressable element - scale on press */
+.pressable {
+  transition: transform var(--duration-fast) var(--ease-ios),
+              opacity var(--duration-fast) var(--ease-ios);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pressable:active {
+  transform: scale(0.97);
+  opacity: 0.9;
+}
+
+/* Subtle pressable - lighter scale effect */
+.pressable-subtle:active {
+  transform: scale(0.985);
+}
+
+/* ===== Text Utilities ===== */
+
+/* Gradient text - for branded elements */
+.text-gradient-accent {
+  background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-info) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Truncation */
+.truncate-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.truncate-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ===== Animation Keyframes ===== */
+
+/* Fade in up */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up var(--duration-normal) var(--ease-out);
+}
+
+/* Scale in */
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-scale-in {
+  animation: scale-in var(--duration-fast) var(--ease-ios-spring);
+}
+
+/* Slide up (for sheets) */
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up var(--duration-sheet) var(--ease-ios-spring);
 }

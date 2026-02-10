@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom"
-import { Newspaper, LayoutList, Globe, Bookmark, Settings, ChevronRight, type LucideIcon } from "lucide-react"
+import { Newspaper, LayoutList, Bookmark, Settings, ChevronRight, Sparkles, type LucideIcon } from "lucide-react"
 import { AppLogo } from "@/components/ui/app-logo"
 import {
   Sheet,
@@ -8,7 +8,6 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
-import { Card, Separator } from "@/components/ui"
 import { useState, createContext, useContext } from "react"
 import { hapticMedium } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
@@ -39,15 +38,19 @@ interface NavItem {
   description?: string
 }
 
+// Clean, unified blue accent - Apple-inspired monochrome navigation
+const ACCENT_BLUE = "#0A84FF"
+const NEUTRAL_GRAY = "#8E8E93"
+
 const primaryNavItems: NavItem[] = [
-  { path: "/", label: "Today", icon: Newspaper, iconBg: "#007AFF", description: "Daily brief" },
-  { path: "/feed", label: "Feed", icon: LayoutList, iconBg: "#FF9500", description: "All articles" },
-  { path: "/sources", label: "Sources", icon: Globe, iconBg: "#32ADE6", description: "News sources" },
-  { path: "/bookmarks", label: "Bookmarks", icon: Bookmark, iconBg: "#FF2D55", description: "Saved articles" },
+  { path: "/", label: "Today", icon: Newspaper, iconBg: ACCENT_BLUE, description: "Daily brief" },
+  { path: "/feed", label: "Feed", icon: LayoutList, iconBg: ACCENT_BLUE, description: "All articles" },
+  { path: "/ask", label: "Ask AI", icon: Sparkles, iconBg: ACCENT_BLUE, description: "Chat with sources" },
+  { path: "/bookmarks", label: "Bookmarks", icon: Bookmark, iconBg: ACCENT_BLUE, description: "Saved articles" },
 ]
 
 const secondaryNavItems: NavItem[] = [
-  { path: "/settings", label: "Settings", icon: Settings, iconBg: "#8E8E93", description: "Preferences" },
+  { path: "/settings", label: "Settings", icon: Settings, iconBg: NEUTRAL_GRAY, description: "Preferences" },
 ]
 
 const allNavItems = [...primaryNavItems, ...secondaryNavItems]
@@ -78,105 +81,106 @@ export function MainLayout() {
       </SheetTrigger>
       <SheetContent
         side="right"
-        className="w-[300px] border-l-0 bg-[var(--color-bg-grouped)] p-0"
+        className="w-[320px] border-l-0 bg-[var(--color-surface)] p-0 shadow-[-8px_0_32px_rgba(0,0,0,0.08)]"
       >
         <SheetHeader className="sr-only">
           <SheetTitle>Navigation Menu</SheetTitle>
         </SheetHeader>
 
         <div className="flex h-full flex-col">
-          {/* Header with brand - padding accounts for safe area */}
-          <div className="px-[20px] pb-[28px]" style={{ paddingTop: 'calc(20px + var(--safe-area-inset-top))' }}>
-            <div className="flex items-center gap-[14px]">
-              {/* Logo container for consistent sizing */}
-              <div className="flex h-[44px] w-[44px] items-center justify-center shrink-0">
-                <AppLogo size={44} glow className="drop-shadow-[0_2px_8px_rgba(53,211,255,0.3)]" />
+          {/* Header with brand */}
+          <div className="px-[24px] pb-[32px]" style={{ paddingTop: 'calc(24px + var(--safe-area-inset-top))' }}>
+            <div className="flex items-center gap-[16px]">
+              <div className="flex h-[48px] w-[48px] items-center justify-center shrink-0">
+                <AppLogo size={48} glow className="drop-shadow-[0_4px_12px_rgba(10,132,255,0.25)]" />
               </div>
               <div>
-                <span className="block text-[19px] font-bold tracking-[-0.4px] text-[var(--color-text-primary)]">
+                <span className="block text-[20px] font-bold tracking-[-0.5px] text-[var(--color-text-primary)]">
                   P&C Brief
                 </span>
-                <span className="block text-[13px] text-[var(--color-text-tertiary)] tracking-[-0.08px] mt-[1px]">
+                <span className="block text-[12px] tracking-[-0.02em] text-[var(--color-text-tertiary)]">
                   Insurance News AI
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Primary Navigation */}
-          <nav className="flex-1 px-[12px]">
-            <p className="mb-[6px] ml-[8px] text-[12px] font-semibold uppercase tracking-[0.4px] text-[var(--color-text-tertiary)]">
-              Navigation
-            </p>
-            <Card variant="grouped">
+          {/* Navigation */}
+          <nav className="flex-1 px-[16px]">
+            {/* Primary Navigation Card */}
+            <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-grouped)] shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
               {primaryNavItems.map((item, index) => {
                 const isActive = location.pathname === item.path
                 const Icon = item.icon
-                const isNextActive = location.pathname === primaryNavItems[index + 1]?.path
+                const isLast = index === primaryNavItems.length - 1
                 return (
-                  <div key={item.path}>
-                    <button
-                      onClick={() => {
-                        hapticMedium()
-                        handleNavigation(item.path)
-                      }}
+                  <button
+                    key={item.path}
+                    onClick={() => {
+                      hapticMedium()
+                      handleNavigation(item.path)
+                    }}
+                    className={cn(
+                      "group flex w-full items-center gap-[14px] px-[16px] py-[14px] text-left transition-all duration-200",
+                      isActive
+                        ? "bg-[var(--color-accent)]"
+                        : "bg-[var(--color-surface)] hover:bg-[var(--color-fill-quaternary)] active:bg-[var(--color-fill-tertiary)]",
+                      !isLast && !isActive && "border-b border-[var(--color-separator)]"
+                    )}
+                  >
+                    {/* Icon container */}
+                    <div
                       className={cn(
-                        "flex w-full items-center gap-[12px] px-[14px] py-[11px] text-left transition-all duration-[var(--duration-fast)]",
+                        "flex h-[32px] w-[32px] items-center justify-center rounded-[8px] shrink-0 transition-transform duration-200 group-active:scale-[0.92]",
                         isActive
-                          ? "bg-[var(--color-accent)]"
-                          : "active:bg-[var(--color-fill-quaternary)]"
+                          ? "bg-white/20"
+                          : "bg-[var(--color-accent-soft)]"
                       )}
                     >
-                      <div
-                        className="flex h-[30px] w-[30px] items-center justify-center rounded-[7px]"
-                        style={{
-                          backgroundColor: isActive ? 'rgba(255,255,255,0.22)' : `${item.iconBg}14`
-                        }}
+                      <Icon
+                        className="h-[17px] w-[17px]"
+                        style={{ color: isActive ? 'white' : 'var(--color-accent)' }}
+                        strokeWidth={1.8}
+                      />
+                    </div>
+
+                    {/* Text content */}
+                    <div className="flex-1 min-w-0">
+                      <span
+                        className={cn(
+                          "block text-[16px] font-semibold tracking-[-0.3px]",
+                          isActive ? "text-white" : "text-[var(--color-text-primary)]"
+                        )}
                       >
-                        <Icon
-                          className="h-[16px] w-[16px]"
-                          style={{ color: isActive ? 'white' : item.iconBg }}
-                          strokeWidth={1.8}
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
+                        {item.label}
+                      </span>
+                      {item.description && (
                         <span
                           className={cn(
-                            "block text-[15px] font-semibold tracking-[-0.2px]",
-                            isActive ? "text-white" : "text-[var(--color-text-primary)]"
+                            "block text-[13px] tracking-[-0.08px] mt-[1px]",
+                            isActive ? "text-white/65" : "text-[var(--color-text-tertiary)]"
                           )}
                         >
-                          {item.label}
+                          {item.description}
                         </span>
-                        {item.description && (
-                          <span
-                            className={cn(
-                              "block text-[12px] tracking-[-0.04px] mt-[1px]",
-                              isActive ? "text-white/70" : "text-[var(--color-text-secondary)]"
-                            )}
-                          >
-                            {item.description}
-                          </span>
-                        )}
-                      </div>
-                      <ChevronRight
-                        className={cn(
-                          "h-[14px] w-[14px] shrink-0",
-                          isActive ? "text-white/50" : "text-[var(--color-text-tertiary)]"
-                        )}
-                        strokeWidth={2.5}
-                      />
-                    </button>
-                    {index < primaryNavItems.length - 1 && !isActive && !isNextActive && (
-                      <Separator className="ml-[56px]" />
-                    )}
-                  </div>
+                      )}
+                    </div>
+
+                    {/* Chevron */}
+                    <ChevronRight
+                      className={cn(
+                        "h-[14px] w-[14px] shrink-0 transition-transform duration-200 group-hover:translate-x-[2px]",
+                        isActive ? "text-white/40" : "text-[var(--color-text-quaternary)]"
+                      )}
+                      strokeWidth={2.5}
+                    />
+                  </button>
                 )
               })}
-            </Card>
+            </div>
 
-            {/* Secondary Navigation */}
-            <Card variant="grouped" className="mt-[14px]">
+            {/* Secondary Navigation Card */}
+            <div className="mt-[20px] overflow-hidden rounded-[16px] bg-[var(--color-bg-grouped)] shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
               {secondaryNavItems.map((item) => {
                 const isActive = location.pathname === item.path
                 const Icon = item.icon
@@ -188,32 +192,35 @@ export function MainLayout() {
                       handleNavigation(item.path)
                     }}
                     className={cn(
-                      "flex w-full items-center gap-[12px] px-[14px] py-[11px] text-left transition-all duration-[var(--duration-fast)]",
+                      "group flex w-full items-center gap-[14px] px-[16px] py-[14px] text-left transition-all duration-200",
                       isActive
                         ? "bg-[var(--color-accent)]"
-                        : "active:bg-[var(--color-fill-quaternary)]"
+                        : "bg-[var(--color-surface)] hover:bg-[var(--color-fill-quaternary)] active:bg-[var(--color-fill-tertiary)]"
                     )}
                   >
+                    {/* Icon container */}
                     <div
                       className={cn(
-                        "flex h-[30px] w-[30px] items-center justify-center rounded-[7px]",
+                        "flex h-[32px] w-[32px] items-center justify-center rounded-[8px] shrink-0 transition-transform duration-200 group-active:scale-[0.92]",
                         isActive
-                          ? "bg-white/22"
+                          ? "bg-white/20"
                           : "bg-[var(--color-fill-tertiary)]"
                       )}
                     >
                       <Icon
                         className={cn(
-                          "h-[16px] w-[16px]",
+                          "h-[17px] w-[17px]",
                           isActive ? "text-white" : "text-[var(--color-text-secondary)]"
                         )}
                         strokeWidth={1.8}
                       />
                     </div>
+
+                    {/* Text content */}
                     <div className="flex-1 min-w-0">
                       <span
                         className={cn(
-                          "block text-[15px] font-semibold tracking-[-0.2px]",
+                          "block text-[16px] font-semibold tracking-[-0.3px]",
                           isActive ? "text-white" : "text-[var(--color-text-primary)]"
                         )}
                       >
@@ -222,31 +229,33 @@ export function MainLayout() {
                       {item.description && (
                         <span
                           className={cn(
-                            "block text-[12px] tracking-[-0.04px] mt-[1px]",
-                            isActive ? "text-white/70" : "text-[var(--color-text-secondary)]"
+                            "block text-[13px] tracking-[-0.08px] mt-[1px]",
+                            isActive ? "text-white/65" : "text-[var(--color-text-tertiary)]"
                           )}
                         >
                           {item.description}
                         </span>
                       )}
                     </div>
+
+                    {/* Chevron */}
                     <ChevronRight
                       className={cn(
-                        "h-[14px] w-[14px] shrink-0",
-                        isActive ? "text-white/50" : "text-[var(--color-text-tertiary)]"
+                        "h-[14px] w-[14px] shrink-0 transition-transform duration-200 group-hover:translate-x-[2px]",
+                        isActive ? "text-white/40" : "text-[var(--color-text-quaternary)]"
                       )}
                       strokeWidth={2.5}
                     />
                   </button>
                 )
               })}
-            </Card>
+            </div>
           </nav>
 
           {/* Footer */}
-          <div className="px-[20px] pb-[calc(24px+var(--safe-area-inset-bottom))] pt-[20px] text-center">
-            <p className="text-[12px] font-medium tracking-[-0.03em] text-[var(--color-text-tertiary)]">
-              Made in Hackensack · v5.16
+          <div className="px-[24px] pb-[calc(28px+var(--safe-area-inset-bottom))] pt-[24px] text-center">
+            <p className="text-[11px] font-medium tracking-[0.02em] text-[var(--color-text-quaternary)]">
+              Made in Hackensack
             </p>
           </div>
         </div>
@@ -265,17 +274,24 @@ export function MainLayout() {
         />
 
         {/* Main Content */}
-        <main className="flex-1">
-          <div className="safe-area-padding-x">
-            <div className="mx-auto max-w-2xl px-[var(--spacing-4)] pb-[52px] pt-[20px]">
-              {/* Large Page Title - iOS style with ref for IntersectionObserver */}
-              <div ref={titleRef}>
-                <h1 className="mb-[20px] text-[32px] font-bold leading-[1.1] tracking-[-0.4px] text-[var(--color-text-primary)]">
-                  {pageTitle}
-                </h1>
+        <main className="flex-1 flex flex-col overflow-hidden">
+          <div className="safe-area-padding-x flex-1 flex flex-col overflow-hidden">
+            {/* Full-bleed layout for /ask and /feed routes (no title, no padding) */}
+            {location.pathname === "/ask" || location.pathname === "/feed" ? (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <Outlet />
               </div>
-              <Outlet />
-            </div>
+            ) : (
+              <div className="mx-auto w-full max-w-2xl px-[var(--spacing-4)] pb-[52px] pt-[20px] flex-1 overflow-x-hidden overflow-y-auto">
+                {/* Large Page Title - iOS style with ref for IntersectionObserver */}
+                <div ref={titleRef}>
+                  <h1 className="mb-[12px] text-[32px] font-bold leading-[1.1] tracking-[-0.4px] text-[var(--color-text-primary)]">
+                    {pageTitle}
+                  </h1>
+                </div>
+                <Outlet />
+              </div>
+            )}
           </div>
         </main>
 

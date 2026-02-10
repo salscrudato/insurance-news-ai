@@ -64,8 +64,24 @@ interface FetchArticlesParams {
   pageParam?: QueryDocumentSnapshot<DocumentData> | null
 }
 
-async function fetchArticles({ filters, pageParam }: FetchArticlesParams) {
-  const articlesRef = collection(db, "articles")
+/**
+ * Split an array into chunks of a given size
+ */
+function chunkArray<T>(array: T[], size: number): T[][] {
+  const chunks: T[][] = []
+  for (let i = 0; i < array.length; i += size) {
+    chunks.push(array.slice(i, i + size))
+  }
+  return chunks
+}
+
+/**
+ * Build base query constraints (without source filter)
+ */
+function buildBaseConstraints(
+  filters: ArticleFilters,
+  pageParam?: QueryDocumentSnapshot<DocumentData> | null
+): Parameters<typeof query>[1][] {
   const constraints: Parameters<typeof query>[1][] = []
 
   // Time window filter
@@ -79,11 +95,6 @@ async function fetchArticles({ filters, pageParam }: FetchArticlesParams) {
     constraints.push(where("categories", "array-contains", filters.category))
   }
 
-  // Source filter
-  if (filters.sourceIds && filters.sourceIds.length > 0 && filters.sourceIds.length <= 10) {
-    constraints.push(where("sourceId", "in", filters.sourceIds))
-  }
-
   // Order by publishedAt desc
   constraints.push(orderBy("publishedAt", "desc"))
 
@@ -92,7 +103,64 @@ async function fetchArticles({ filters, pageParam }: FetchArticlesParams) {
     constraints.push(startAfter(pageParam))
   }
 
-  // Limit
+  return constraints
+}
+
+async function fetchArticles({ filters, pageParam }: FetchArticlesParams) {
+  const articlesRef = collection(db, "articles")
+
+  // If >10 sources, we need to batch queries (Firestore 'in' limit is 10)
+  if (filters.sourceIds && filters.sourceIds.length > 10) {
+    const sourceChunks = chunkArray(filters.sourceIds, 10)
+    const baseConstraints = buildBaseConstraints(filters, pageParam)
+
+    // Execute parallel queries for each chunk of sources
+    const queryPromises = sourceChunks.map((chunk) => {
+      const chunkConstraints = [
+        ...baseConstraints,
+        where("sourceId", "in", chunk),
+        limit(ARTICLES_PER_PAGE),
+      ]
+      return getDocs(query(articlesRef, ...chunkConstraints))
+    })
+
+    const snapshots = await Promise.all(queryPromises)
+
+    // Merge results from all chunks, dedupe by id, sort by publishedAt
+    const allDocs = snapshots.flatMap((snap) => snap.docs)
+    const uniqueDocsMap = new Map<string, QueryDocumentSnapshot<DocumentData>>()
+    for (const doc of allDocs) {
+      if (!uniqueDocsMap.has(doc.id)) {
+        uniqueDocsMap.set(doc.id, doc)
+      }
+    }
+
+    const uniqueDocs = Array.from(uniqueDocsMap.values())
+      .sort((a, b) => {
+        const aTime = a.data().publishedAt?.toMillis?.() ?? 0
+        const bTime = b.data().publishedAt?.toMillis?.() ?? 0
+        return bTime - aTime // desc
+      })
+      .slice(0, ARTICLES_PER_PAGE)
+
+    const articles = uniqueDocs.map(docToArticle)
+    const lastDoc = uniqueDocs[uniqueDocs.length - 1] || null
+
+    return {
+      articles,
+      lastDoc,
+      hasMore: uniqueDocs.length === ARTICLES_PER_PAGE,
+    }
+  }
+
+  // Standard single query path (0-10 sources)
+  const constraints = buildBaseConstraints(filters, pageParam)
+
+  // Source filter (when <= 10)
+  if (filters.sourceIds && filters.sourceIds.length > 0) {
+    constraints.push(where("sourceId", "in", filters.sourceIds))
+  }
+
   constraints.push(limit(ARTICLES_PER_PAGE))
 
   const q = query(articlesRef, ...constraints)
@@ -144,33 +212,5 @@ export function useSources() {
   })
 }
 
-/**
- * Hook for fetching all enabled sources with full data (for Sources page)
- */
-export function useAllSources() {
-  return useQuery({
-    queryKey: ["sources", "full"],
-    queryFn: async () => {
-      const sourcesRef = collection(db, "sources")
-      const q = query(sourcesRef, where("enabled", "==", true), orderBy("name"), limit(MAX_SOURCES))
-      const snapshot = await getDocs(q)
-      return snapshot.docs.map((doc) => {
-        const data = doc.data()
-        return {
-          id: doc.id,
-          name: data.name,
-          siteUrl: data.siteUrl,
-          rssUrl: data.rssUrl,
-          enabled: data.enabled,
-          tier: data.tier,
-          tags: data.tags || [],
-          createdAt: data.createdAt,
-          updatedAt: data.updatedAt,
-          fetchState: data.fetchState,
-        } as import("@/types/firestore").Source
-      })
-    },
-    staleTime: 1000 * 60 * 30, // 30 minutes
-  })
-}
+
 

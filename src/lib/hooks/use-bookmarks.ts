@@ -79,15 +79,17 @@ interface ToggleBookmarkParams {
 
 /**
  * Toggle bookmark status for an article
+ * Note: Anonymous/guest users cannot bookmark articles
  */
 export function useToggleBookmark() {
-  const { user } = useAuth()
+  const { user, isAnonymous } = useAuth()
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async ({ article, isCurrentlyBookmarked }: ToggleBookmarkParams) => {
       if (!user) throw new Error("Must be authenticated to bookmark")
-      
+      if (isAnonymous) throw new Error("Guests cannot bookmark articles. Please sign in to save articles.")
+
       const bookmarkRef = doc(db, "users", user.uid, "bookmarks", article.id)
       
       if (isCurrentlyBookmarked) {
