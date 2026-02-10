@@ -19,6 +19,9 @@ import {
   Clock,
   Trash2,
   Shield,
+  MessageSquareText,
+  Lock,
+  ShieldCheck,
 } from "lucide-react"
 import { toast } from "sonner"
 import { useMutation, useQuery } from "@tanstack/react-query"
@@ -975,8 +978,9 @@ export function AskPage() {
             "relative flex items-end rounded-[22px]",
             "bg-[var(--color-fill-tertiary)]",
             "border border-[var(--color-separator-opaque)]",
-            "transition-colors duration-200",
+            "transition-all duration-200",
             "has-[:focus]:border-[rgba(0,122,255,0.35)]",
+            "has-[:focus]:shadow-[0_0_0_3px_rgba(0,122,255,0.12)]",
           )}
         >
           <textarea
@@ -987,7 +991,7 @@ export function AskPage() {
             placeholder="Ask about P&C news..."
             aria-label="Type your question"
             rows={1}
-            className="flex-1 resize-none overflow-hidden bg-transparent pl-[16px] pr-[44px] py-[10px] text-[16px] leading-[1.45] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-quaternary)] focus:outline-none focus:ring-0 focus:[box-shadow:none] focus-visible:outline-none focus-visible:ring-0 focus-visible:[box-shadow:none] border-none outline-none"
+            className="focus-self-managed flex-1 resize-none overflow-hidden bg-transparent pl-[16px] pr-[44px] py-[10px] text-[16px] leading-[1.45] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-quaternary)] border-none outline-none"
           />
           <button
             onClick={() => handleSend()}
@@ -1092,7 +1096,7 @@ function AiConsentDialog({
           "relative w-full sm:max-w-[380px] mx-auto",
           "bg-[var(--color-surface)] rounded-t-[20px] sm:rounded-[20px]",
           "shadow-[0_-4px_32px_rgba(0,0,0,0.12)]",
-          "animate-in slide-in-from-bottom duration-300",
+          "consent-sheet-enter",
           "pb-[max(20px,env(safe-area-inset-bottom))]",
         )}
       >
@@ -1117,7 +1121,9 @@ function AiConsentDialog({
           {/* Data disclosure items */}
           <div className="space-y-[14px] mb-[24px]">
             <div className="flex gap-[12px]">
-              <span className="text-[14px] leading-[1.1] mt-[3px] shrink-0">💬</span>
+              <div className="flex items-center justify-center h-[28px] w-[28px] rounded-[8px] bg-[var(--color-accent-soft)] shrink-0 mt-[1px]">
+                <MessageSquareText className="h-[14px] w-[14px] text-[var(--color-accent)]" strokeWidth={1.8} />
+              </div>
               <div>
                 <p className="text-[14px] font-semibold text-[var(--color-text-primary)] leading-[1.35] tracking-[-0.1px]">
                   What is sent
@@ -1129,7 +1135,9 @@ function AiConsentDialog({
             </div>
 
             <div className="flex gap-[12px]">
-              <span className="text-[14px] leading-[1.1] mt-[3px] shrink-0">🔒</span>
+              <div className="flex items-center justify-center h-[28px] w-[28px] rounded-[8px] bg-[var(--color-accent-soft)] shrink-0 mt-[1px]">
+                <Lock className="h-[14px] w-[14px] text-[var(--color-accent)]" strokeWidth={1.8} />
+              </div>
               <div>
                 <p className="text-[14px] font-semibold text-[var(--color-text-primary)] leading-[1.35] tracking-[-0.1px]">
                   Who processes it
@@ -1141,7 +1149,9 @@ function AiConsentDialog({
             </div>
 
             <div className="flex gap-[12px]">
-              <span className="text-[14px] leading-[1.1] mt-[3px] shrink-0">🚫</span>
+              <div className="flex items-center justify-center h-[28px] w-[28px] rounded-[8px] bg-[var(--color-accent-soft)] shrink-0 mt-[1px]">
+                <ShieldCheck className="h-[14px] w-[14px] text-[var(--color-accent)]" strokeWidth={1.8} />
+              </div>
               <div>
                 <p className="text-[14px] font-semibold text-[var(--color-text-primary)] leading-[1.35] tracking-[-0.1px]">
                   What is not sent

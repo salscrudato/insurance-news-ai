@@ -312,6 +312,13 @@ select:focus-visible {
   box-shadow: 0 0 0 3px var(--color-accent-soft), 0 0 0 1px var(--color-accent);
 }
 
+/* Suppress focus ring on elements that manage their own focus styles via a parent */
+.focus-self-managed:focus-visible,
+.focus-self-managed:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 /* Interactive element focus ring */
 .focus-ring-inset:focus-visible {
   box-shadow: inset 0 0 0 2px var(--color-accent);
@@ -895,4 +902,20 @@ select:focus-visible {
 
 .animate-slide-up {
   animation: slide-up var(--duration-sheet) var(--ease-ios-spring);
+}
+
+/* Consent sheet entrance */
+@keyframes consent-enter {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.consent-sheet-enter {
+  animation: consent-enter 0.35s cubic-bezier(0.32, 0.72, 0, 1);
 }

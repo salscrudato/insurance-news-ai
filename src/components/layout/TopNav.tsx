@@ -76,7 +76,7 @@ export function TopNav({
         className="safe-area-padding-x"
         style={{ paddingTop: 'var(--safe-area-inset-top)' }}
       >
-        <div className="flex h-[44px] items-center justify-between px-[16px]">
+        <div className="flex h-[52px] items-center justify-between px-[16px]">
           {/* Left side: Brand or Back button */}
           <div className="flex items-center min-w-0 flex-1">
             {isSubScreen ? (
