@@ -6,7 +6,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, Link } from "react-router-dom"
 import { Loader2 } from "lucide-react"
 import { AppLogo } from "@/components/ui/app-logo"
 import { useAuth } from "@/lib/auth-context"
@@ -410,9 +410,31 @@ export function AuthPage() {
         <div className="flex-[0.6]" />
 
         {/* Disclaimer */}
-        <p className="pb-[20px] max-w-[240px] text-center text-[12px] leading-[1.45] tracking-[-0.08px] text-[var(--color-text-quaternary)]">
+        <p className="max-w-[240px] text-center text-[12px] leading-[1.45] tracking-[-0.08px] text-[var(--color-text-quaternary)]">
           Sign in to save bookmarks and sync across devices
         </p>
+
+        {/* Terms & Privacy */}
+        <nav
+          className="pb-[max(20px,env(safe-area-inset-bottom))] pt-[12px] flex flex-wrap items-center justify-center gap-x-[10px] gap-y-[4px]"
+          aria-label="Legal"
+        >
+          <Link
+            to="/terms"
+            className="text-[12px] font-medium tracking-[-0.08px] text-[var(--color-text-tertiary)] underline underline-offset-2 transition-colors active:text-[var(--color-text-secondary)]"
+            onClick={() => hapticLight()}
+          >
+            Terms of Service
+          </Link>
+          <span className="text-[var(--color-text-quaternary)]" aria-hidden>·</span>
+          <Link
+            to="/privacy"
+            className="text-[12px] font-medium tracking-[-0.08px] text-[var(--color-text-tertiary)] underline underline-offset-2 transition-colors active:text-[var(--color-text-secondary)]"
+            onClick={() => hapticLight()}
+          >
+            Privacy Policy
+          </Link>
+        </nav>
       </div>
 
       {/* ------------------------------------------------------------------ */}
