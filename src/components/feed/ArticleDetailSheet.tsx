@@ -24,22 +24,28 @@ import { toast } from "sonner"
 import { useIsBookmarked, useToggleBookmark, useArticleAI } from "@/lib/hooks"
 import { useAuth } from "@/lib/auth-context"
 import type { Article, ArticleAI } from "@/types/firestore"
+import type { ArticleFromApi } from "@/lib/hooks"
 import type { Timestamp } from "firebase/firestore"
 import { hapticMedium, hapticLight } from "@/lib/haptics"
 import { openUrl } from "@/lib/browser"
 
+// Accept either Firestore Article (from direct queries) or API Article (from Cloud Functions)
+type ArticleType = Article | ArticleFromApi
+
 interface ArticleDetailSheetProps {
-  article: Article | null
+  article: ArticleType | null
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-function formatDate(timestamp: Timestamp | null | undefined): string {
-  if (!timestamp || typeof timestamp.toDate !== "function") {
+function formatDate(timestamp: Timestamp | string | null | undefined): string {
+  if (!timestamp) {
     return "Date unavailable"
   }
   try {
-    return timestamp.toDate().toLocaleDateString("en-US", {
+    // Handle both Firestore Timestamp and ISO string
+    const date = typeof timestamp === "string" ? new Date(timestamp) : timestamp.toDate()
+    return date.toLocaleDateString("en-US", {
       weekday: "short",
       month: "short",
       day: "numeric",

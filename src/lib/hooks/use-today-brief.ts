@@ -44,26 +44,86 @@ export interface TodayBriefResponse {
 const BRIEF_CACHE_KEY = "today_brief"
 const BRIEF_CACHE_TTL = 30 * 60 * 1000 // 30 minutes
 
-// Callable function reference
+// Cloud Functions endpoint URL
+const FUNCTIONS_BASE_URL = "https://us-central1-insurance-news-ai.cloudfunctions.net"
+
+// Callable function reference (for web)
 const getTodayBriefCallable = httpsCallable<{ date?: string }, TodayBriefResponse>(
   functions,
   "getTodayBrief"
 )
 
 /**
+ * Fetch today's brief using direct HTTP (works in Capacitor WebView)
+ */
+async function fetchTodayBriefHttp(date?: string): Promise<TodayBriefResponse> {
+  const response = await fetch(`${FUNCTIONS_BASE_URL}/getTodayBrief`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ data: { date } }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`HTTP error: ${response.status}`)
+  }
+
+  const json = await response.json()
+  // Firebase callable functions wrap response in { result: ... }
+  return json.result || json
+}
+
+/**
  * Fetch today's brief (or a specific date's brief)
+ * Uses direct HTTP fetch with timeout, falls back to callable
  * Updates localStorage cache on success
  */
 async function fetchTodayBrief(date?: string): Promise<TodayBriefResponse> {
-  const result = await getTodayBriefCallable({ date })
-  const data = result.data
+  console.log("[useTodayBrief] fetchTodayBrief starting...", { date })
 
-  // Cache the response (only for "today" queries)
-  if (!date && data.found) {
-    setCache(BRIEF_CACHE_KEY, data, BRIEF_CACHE_TTL)
+  // Create timeout promise (10 seconds)
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error("Request timed out")), 10000)
+  })
+
+  try {
+    // Try direct HTTP fetch first (works better in Capacitor)
+    console.log("[useTodayBrief] Trying HTTP fetch...")
+    const data = await Promise.race([
+      fetchTodayBriefHttp(date),
+      timeoutPromise
+    ])
+    console.log("[useTodayBrief] fetchTodayBrief succeeded", data?.found)
+
+    // Cache the response (only for "today" queries)
+    if (!date && data.found) {
+      setCache(BRIEF_CACHE_KEY, data, BRIEF_CACHE_TTL)
+    }
+
+    return data
+  } catch (httpError) {
+    console.warn("[useTodayBrief] HTTP fetch failed, trying callable...", httpError)
+
+    try {
+      // Fallback to callable (for web/emulator)
+      const result = await Promise.race([
+        getTodayBriefCallable({ date }),
+        timeoutPromise
+      ])
+      console.log("[useTodayBrief] Callable succeeded", result.data?.found)
+      const data = result.data
+
+      if (!date && data.found) {
+        setCache(BRIEF_CACHE_KEY, data, BRIEF_CACHE_TTL)
+      }
+
+      return data
+    } catch (callableError) {
+      console.error("[useTodayBrief] Both methods failed", callableError)
+      throw callableError
+    }
   }
-
-  return data
 }
 
 /**

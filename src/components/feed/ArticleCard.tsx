@@ -7,7 +7,7 @@
 import { useState, useCallback } from "react"
 import { Sparkles, Newspaper } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { Article } from "@/types/firestore"
+import type { ArticleFromApi } from "@/lib/hooks"
 import type { Timestamp } from "firebase/firestore"
 
 /**
@@ -76,12 +76,14 @@ function ArticleImage({ src, alt = "" }: ArticleImageProps) {
 }
 
 interface ArticleCardProps {
-  article: Article
-  onSelect: (article: Article) => void
+  article: ArticleFromApi
+  onSelect: (article: ArticleFromApi) => void
 }
 
-function formatRelativeTime(timestamp: Timestamp): string {
-  const date = timestamp.toDate()
+function formatRelativeTime(timestamp: Timestamp | string | null): string {
+  if (!timestamp) return ""
+  // Handle both Firestore Timestamp and ISO string
+  const date = typeof timestamp === "string" ? new Date(timestamp) : timestamp.toDate()
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
   const diffMins = Math.floor(diffMs / (1000 * 60))

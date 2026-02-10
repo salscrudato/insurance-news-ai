@@ -117,7 +117,7 @@ async function registerWebPush(uid: string): Promise<string | null> {
         console.log("[Push] Foreground message:", payload)
         // Show notification manually for foreground
         if (payload.notification) {
-          new Notification(payload.notification.title || "P&C Brief", {
+          new Notification(payload.notification.title || "The Brief", {
             body: payload.notification.body,
             icon: "/pwa-192x192.png",
           })

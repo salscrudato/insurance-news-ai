@@ -18,7 +18,7 @@ import {
 import { httpsCallable } from "firebase/functions"
 import { db, functions } from "@/lib/firebase"
 import { useAuth } from "@/lib/auth-context"
-import type { Bookmark, Article, ArticleAI } from "@/types/firestore"
+import type { Bookmark, ArticleAI } from "@/types/firestore"
 
 // Maximum bookmarks to fetch (most users won't have more than this)
 const MAX_BOOKMARKS = 100
@@ -72,8 +72,16 @@ export function useIsBookmarked(articleId: string | undefined) {
   })
 }
 
+// Minimum article fields needed for bookmarking
+interface BookmarkableArticle {
+  id: string
+  title: string
+  sourceName: string
+  url: string
+}
+
 interface ToggleBookmarkParams {
-  article: Article
+  article: BookmarkableArticle
   isCurrentlyBookmarked: boolean
 }
 

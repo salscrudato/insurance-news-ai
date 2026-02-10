@@ -1,6 +1,6 @@
 /**
  * Terms of Service Page
- * Comprehensive legal terms for P&C Brief mobile application
+ * Comprehensive legal terms for The Brief mobile application
  */
 
 import { ChevronLeft } from "lucide-react"
@@ -8,8 +8,8 @@ import { useNavigate } from "react-router-dom"
 import { hapticLight } from "@/lib/haptics"
 
 const EFFECTIVE_DATE = "February 10, 2026"
-const COMPANY_NAME = "P&C Brief"
-const APP_NAME = "P&C Brief"
+const COMPANY_NAME = "The Brief"
+const APP_NAME = "The Brief"
 const CONTACT_EMAIL = "legal@pcbrief.app"
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

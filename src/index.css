@@ -170,6 +170,11 @@ html {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   font-feature-settings: "kern" 1, "liga" 1;
+  /* Prevent overscroll bounce on iOS */
+  height: 100%;
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
 }
 
 body {
@@ -181,17 +186,21 @@ body {
   line-height: 1.47;
   font-size: 17px;
   letter-spacing: -0.022em;
-  min-height: 100vh;
-  min-height: 100dvh;
+  /* Fixed positioning prevents iOS WebView bounce */
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  position: fixed;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
-  scroll-behavior: smooth;
-  overscroll-behavior-y: none;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
 }
 
 #root {
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }

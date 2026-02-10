@@ -944,6 +944,96 @@ export const getTodayBrief = onCall<GetTodayBriefData>(async (request) => {
 });
 
 // ============================================================================
+// Articles API
+// ============================================================================
+
+interface GetArticlesData {
+  category?: string;
+  timeWindow?: "24h" | "7d" | "all";
+  sourceIds?: string[];
+  limit?: number;
+  startAfterPublishedAt?: string; // ISO date string for pagination
+}
+
+/**
+ * Callable function to get articles with filters
+ * Used by mobile app where direct Firestore queries hang
+ */
+export const getArticles = onCall<GetArticlesData>(async (request) => {
+  const {
+    category,
+    timeWindow = "7d",
+    sourceIds,
+    limit: requestLimit = 20,
+    startAfterPublishedAt
+  } = request.data || {};
+
+  console.log("[getArticles] Fetching articles", { category, timeWindow, sourceIds, limit: requestLimit });
+
+  // Build query
+  let query = db.collection("articles").orderBy("publishedAt", "desc");
+
+  // Time window filter
+  if (timeWindow !== "all") {
+    const now = new Date();
+    const cutoff = timeWindow === "24h"
+      ? new Date(now.getTime() - 24 * 60 * 60 * 1000)
+      : new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    query = query.where("publishedAt", ">=", Timestamp.fromDate(cutoff));
+  }
+
+  // Category filter
+  if (category && category !== "all") {
+    query = query.where("categories", "array-contains", category);
+  }
+
+  // Source filter (max 10 for Firestore 'in' query)
+  if (sourceIds && sourceIds.length > 0 && sourceIds.length <= 10) {
+    query = query.where("sourceId", "in", sourceIds);
+  }
+
+  // Pagination
+  if (startAfterPublishedAt) {
+    const startAfterDate = new Date(startAfterPublishedAt);
+    query = query.startAfter(Timestamp.fromDate(startAfterDate));
+  }
+
+  // Limit
+  const safeLimit = Math.min(requestLimit, 50);
+  query = query.limit(safeLimit);
+
+  const snapshot = await query.get();
+
+  const articles = snapshot.docs.map((doc) => {
+    const data = doc.data() as Article;
+    return {
+      id: doc.id,
+      sourceId: data.sourceId,
+      sourceName: data.sourceName,
+      title: data.title,
+      snippet: data.snippet,
+      url: data.url,
+      canonicalUrl: data.canonicalUrl,
+      guid: data.guid,
+      imageUrl: data.imageUrl || null,
+      categories: data.categories || [],
+      publishedAt: data.publishedAt?.toDate?.()?.toISOString() || null,
+      ingestedAt: data.ingestedAt?.toDate?.()?.toISOString() || null,
+      relevanceScore: data.relevanceScore,
+      isRelevant: data.isRelevant,
+      ai: data.ai || null,
+    };
+  });
+
+  console.log(`[getArticles] Returning ${articles.length} articles`);
+
+  return {
+    articles,
+    hasMore: articles.length === safeLimit,
+  };
+});
+
+// ============================================================================
 // Embeddings Functions
 // ============================================================================
 
@@ -1174,15 +1264,20 @@ export const answerQuestionRag = onCall<AnswerQuestionRagData>(
     timeoutSeconds: 120,
   },
   async (request) => {
-    // Require authentication
-    if (!request.auth) {
-      throw new HttpsError(
-        "unauthenticated",
-        "You must be logged in to use this feature."
-      );
+    // Allow guest access for Capacitor WebView (where Firebase Auth SDK hangs)
+    // Use IP-based guest ID for rate limiting when not authenticated
+    let uid: string;
+    if (request.auth) {
+      uid = request.auth.uid;
+    } else {
+      // Use IP from rawRequest for guest rate limiting
+      const clientIp = request.rawRequest?.headers?.["x-forwarded-for"] ||
+                       request.rawRequest?.ip ||
+                       "unknown";
+      uid = `guest_${typeof clientIp === "string" ? clientIp : clientIp[0]}`;
+      console.log("[answerQuestionRag] Guest mode, using IP-based uid:", uid);
     }
 
-    const uid = request.auth.uid;
     const { question, scope, category, sourceIds, history } = request.data;
 
     // Validate input
@@ -1311,23 +1406,26 @@ export const answerQuestionRagStream = onRequest(
       return;
     }
 
-    // Verify Firebase Auth token
+    // Verify Firebase Auth token (optional for Capacitor guest mode)
     const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith("Bearer ")) {
-      res.status(401).json({ error: "Missing or invalid Authorization header" });
-      return;
-    }
-
-    const token = authHeader.substring(7);
     let uid: string;
 
-    try {
-      const decodedToken = await getAuth().verifyIdToken(token);
-      uid = decodedToken.uid;
-    } catch (error) {
-      console.error("[answerQuestionRagStream] Token verification failed:", error);
-      res.status(401).json({ error: "Invalid authentication token" });
-      return;
+    if (authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.substring(7);
+      try {
+        const decodedToken = await getAuth().verifyIdToken(token);
+        uid = decodedToken.uid;
+      } catch (error) {
+        console.error("[answerQuestionRagStream] Token verification failed:", error);
+        res.status(401).json({ error: "Invalid authentication token" });
+        return;
+      }
+    } else {
+      // No auth token - use IP-based guest ID for rate limiting
+      // This allows Capacitor WebView guests to use the API
+      const clientIp = req.headers["x-forwarded-for"] || req.ip || "unknown";
+      uid = `guest_${typeof clientIp === "string" ? clientIp : clientIp[0]}`;
+      console.log("[answerQuestionRagStream] Guest mode, using IP-based uid:", uid);
     }
 
     // Parse request body

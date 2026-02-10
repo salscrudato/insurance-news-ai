@@ -1,5 +1,6 @@
 /**
  * Hook for fetching articles with infinite scroll, filters, and search
+ * Uses HTTP fetch to Cloud Function (Firestore SDK hangs in Capacitor WebView)
  */
 
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query"
@@ -8,17 +9,16 @@ import {
   query,
   orderBy,
   limit,
-  startAfter,
   where,
   getDocs,
-  Timestamp,
-  QueryDocumentSnapshot,
-  type DocumentData,
 } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import type { Article, SourceCategory } from "@/types/firestore"
 
 const ARTICLES_PER_PAGE = 20
+
+// Cloud Functions endpoint URL
+const FUNCTIONS_BASE_URL = "https://us-central1-insurance-news-ai.cloudfunctions.net"
 
 export interface ArticleFilters {
   category?: SourceCategory | "all"
@@ -27,152 +27,95 @@ export interface ArticleFilters {
   searchQuery?: string
 }
 
-// Convert Firestore doc to Article
-function docToArticle(doc: QueryDocumentSnapshot<DocumentData>): Article {
-  const data = doc.data()
-  return {
-    id: doc.id,
-    sourceId: data.sourceId,
-    sourceName: data.sourceName,
-    title: data.title,
-    snippet: data.snippet,
-    url: data.url,
-    canonicalUrl: data.canonicalUrl,
-    guid: data.guid,
-    imageUrl: data.imageUrl,
-    categories: data.categories,
-    publishedAt: data.publishedAt,
-    ingestedAt: data.ingestedAt,
-    relevanceScore: data.relevanceScore,
-    isRelevant: data.isRelevant,
-    ai: data.ai,
-  } as Article
-}
-
-// Get time threshold for filtering
-function getTimeThreshold(timeWindow: "24h" | "7d" | "all"): Date | null {
-  if (timeWindow === "all") return null
-  const now = new Date()
-  if (timeWindow === "24h") {
-    return new Date(now.getTime() - 24 * 60 * 60 * 1000)
-  }
-  return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-}
-
 interface FetchArticlesParams {
   filters: ArticleFilters
-  pageParam?: QueryDocumentSnapshot<DocumentData> | null
+  pageParam?: string | null // ISO date string for pagination
+}
+
+// Article as returned from the Cloud Function (dates are ISO strings, not Timestamps)
+// This is compatible with the Article type for display purposes
+export interface ArticleFromApi {
+  id: string
+  sourceId: string
+  sourceName: string
+  title: string
+  snippet: string
+  url: string
+  canonicalUrl: string
+  guid: string | null
+  imageUrl: string | null
+  categories: string[]
+  publishedAt: string | null // ISO string (vs Timestamp in Article)
+  ingestedAt: string | null // ISO string (vs Timestamp in Article)
+  relevanceScore: number
+  isRelevant: boolean
+  ai: Article["ai"] | null
+}
+
+interface GetArticlesResponse {
+  articles: ArticleFromApi[]
+  hasMore: boolean
+}
+
+interface FetchArticlesResult {
+  articles: ArticleFromApi[]
+  lastPublishedAt: string | null
+  hasMore: boolean
 }
 
 /**
- * Split an array into chunks of a given size
+ * Fetch articles using HTTP (works in Capacitor WebView where Firestore SDK hangs)
  */
-function chunkArray<T>(array: T[], size: number): T[][] {
-  const chunks: T[][] = []
-  for (let i = 0; i < array.length; i += size) {
-    chunks.push(array.slice(i, i + size))
+async function fetchArticlesHttp(params: {
+  category?: string
+  timeWindow?: "24h" | "7d" | "all"
+  sourceIds?: string[]
+  limit?: number
+  startAfterPublishedAt?: string
+}): Promise<GetArticlesResponse> {
+  console.log("[useArticles] Fetching via HTTP...", params)
+
+  const response = await fetch(`${FUNCTIONS_BASE_URL}/getArticles`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ data: params }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`HTTP error: ${response.status}`)
   }
-  return chunks
+
+  const json = await response.json()
+  // Firebase callable functions wrap response in { result: ... }
+  const result = json.result || json
+
+  console.log("[useArticles] HTTP fetch succeeded, got", result.articles?.length, "articles")
+
+  return result
 }
 
-/**
- * Build base query constraints (without source filter)
- */
-function buildBaseConstraints(
-  filters: ArticleFilters,
-  pageParam?: QueryDocumentSnapshot<DocumentData> | null
-): Parameters<typeof query>[1][] {
-  const constraints: Parameters<typeof query>[1][] = []
+async function fetchArticles({ filters, pageParam }: FetchArticlesParams): Promise<FetchArticlesResult> {
+  console.log("[useArticles] fetchArticles starting...", { filters, hasPageParam: !!pageParam })
 
-  // Time window filter
-  const timeThreshold = getTimeThreshold(filters.timeWindow ?? "all")
-  if (timeThreshold) {
-    constraints.push(where("publishedAt", ">=", Timestamp.fromDate(timeThreshold)))
-  }
+  const result = await fetchArticlesHttp({
+    category: filters.category,
+    timeWindow: filters.timeWindow,
+    sourceIds: filters.sourceIds,
+    limit: ARTICLES_PER_PAGE,
+    startAfterPublishedAt: pageParam || undefined,
+  })
 
-  // Category filter (only if not "all")
-  if (filters.category && filters.category !== "all") {
-    constraints.push(where("categories", "array-contains", filters.category))
-  }
-
-  // Order by publishedAt desc
-  constraints.push(orderBy("publishedAt", "desc"))
-
-  // Pagination
-  if (pageParam) {
-    constraints.push(startAfter(pageParam))
-  }
-
-  return constraints
-}
-
-async function fetchArticles({ filters, pageParam }: FetchArticlesParams) {
-  const articlesRef = collection(db, "articles")
-
-  // If >10 sources, we need to batch queries (Firestore 'in' limit is 10)
-  if (filters.sourceIds && filters.sourceIds.length > 10) {
-    const sourceChunks = chunkArray(filters.sourceIds, 10)
-    const baseConstraints = buildBaseConstraints(filters, pageParam)
-
-    // Execute parallel queries for each chunk of sources
-    const queryPromises = sourceChunks.map((chunk) => {
-      const chunkConstraints = [
-        ...baseConstraints,
-        where("sourceId", "in", chunk),
-        limit(ARTICLES_PER_PAGE),
-      ]
-      return getDocs(query(articlesRef, ...chunkConstraints))
-    })
-
-    const snapshots = await Promise.all(queryPromises)
-
-    // Merge results from all chunks, dedupe by id, sort by publishedAt
-    const allDocs = snapshots.flatMap((snap) => snap.docs)
-    const uniqueDocsMap = new Map<string, QueryDocumentSnapshot<DocumentData>>()
-    for (const doc of allDocs) {
-      if (!uniqueDocsMap.has(doc.id)) {
-        uniqueDocsMap.set(doc.id, doc)
-      }
-    }
-
-    const uniqueDocs = Array.from(uniqueDocsMap.values())
-      .sort((a, b) => {
-        const aTime = a.data().publishedAt?.toMillis?.() ?? 0
-        const bTime = b.data().publishedAt?.toMillis?.() ?? 0
-        return bTime - aTime // desc
-      })
-      .slice(0, ARTICLES_PER_PAGE)
-
-    const articles = uniqueDocs.map(docToArticle)
-    const lastDoc = uniqueDocs[uniqueDocs.length - 1] || null
-
-    return {
-      articles,
-      lastDoc,
-      hasMore: uniqueDocs.length === ARTICLES_PER_PAGE,
-    }
-  }
-
-  // Standard single query path (0-10 sources)
-  const constraints = buildBaseConstraints(filters, pageParam)
-
-  // Source filter (when <= 10)
-  if (filters.sourceIds && filters.sourceIds.length > 0) {
-    constraints.push(where("sourceId", "in", filters.sourceIds))
-  }
-
-  constraints.push(limit(ARTICLES_PER_PAGE))
-
-  const q = query(articlesRef, ...constraints)
-  const snapshot = await getDocs(q)
-
-  const articles = snapshot.docs.map(docToArticle)
-  const lastDoc = snapshot.docs[snapshot.docs.length - 1] || null
+  // Get the last article's publishedAt for pagination
+  const lastPublishedAt = result.articles.length > 0
+    ? result.articles[result.articles.length - 1].publishedAt
+    : null
 
   return {
-    articles,
-    lastDoc,
-    hasMore: snapshot.docs.length === ARTICLES_PER_PAGE,
+    articles: result.articles,
+    lastPublishedAt,
+    hasMore: result.hasMore,
   }
 }
 
@@ -180,11 +123,11 @@ async function fetchArticles({ filters, pageParam }: FetchArticlesParams) {
  * Hook for infinite scroll articles list
  */
 export function useArticles(filters: ArticleFilters = {}) {
-  return useInfiniteQuery({
+  return useInfiniteQuery<FetchArticlesResult, Error, { pages: FetchArticlesResult[]; pageParams: (string | null)[] }, (string | ArticleFilters)[], string | null>({
     queryKey: ["articles", filters],
     queryFn: ({ pageParam }) => fetchArticles({ filters, pageParam }),
-    initialPageParam: null as QueryDocumentSnapshot<DocumentData> | null,
-    getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.lastDoc : undefined),
+    initialPageParam: null,
+    getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.lastPublishedAt : undefined),
     staleTime: 1000 * 60 * 2, // 2 minutes
     gcTime: 1000 * 60 * 10, // 10 minutes
   })

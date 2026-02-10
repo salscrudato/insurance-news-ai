@@ -101,55 +101,59 @@ export function AuthPage() {
   }
 
   const handleContinueAsGuest = async () => {
+    console.log("[AuthPage] handleContinueAsGuest: starting...")
     setError(null)
     setIsLoading("guest")
     hapticLight()
-    
+
     try {
+      console.log("[AuthPage] handleContinueAsGuest: calling continueAsGuest...")
       await continueAsGuest()
+      console.log("[AuthPage] handleContinueAsGuest: continueAsGuest succeeded!")
       hapticSuccess()
       navigate("/", { replace: true })
     } catch (err) {
-      console.error("Guest sign-in failed:", err)
-      setError("Failed to continue as guest. Please try again.")
+      console.error("[AuthPage] handleContinueAsGuest failed:", err)
+      setError(err instanceof Error ? err.message : "Failed to continue as guest. Please try again.")
       hapticWarning()
     } finally {
+      console.log("[AuthPage] handleContinueAsGuest: cleanup, setting isLoading to null")
       setIsLoading(null)
     }
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-[var(--color-bg-grouped)]">
+    <div className="fixed inset-0 flex flex-col overflow-hidden bg-[var(--color-bg-grouped)]">
       {/* Invisible recaptcha container for phone auth */}
       <div id="recaptcha-container" />
-      
-      {/* Main content - centered */}
-      <div className="flex flex-1 flex-col items-center justify-center px-[24px] pb-[40px]">
+
+      {/* Main content - centered with safe areas */}
+      <div className="flex flex-1 flex-col items-center justify-center px-[32px] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
         {/* Logo and branding */}
-        <div className="mb-[48px] flex flex-col items-center">
-          <AppLogo size={80} glow className="mb-[20px]" />
-          <h1 className="text-[28px] font-bold tracking-[-0.5px] text-[var(--color-text-primary)]">
-            P&C Brief
+        <div className="mb-[56px] flex flex-col items-center">
+          <AppLogo size={72} glow className="mb-[24px]" />
+          <h1 className="text-[32px] font-bold tracking-[-0.8px] text-[var(--color-text-primary)]">
+            The Brief
           </h1>
-          <p className="mt-[8px] text-center text-[15px] leading-[1.4] text-[var(--color-text-secondary)]">
-            Your daily insurance intelligence,{"\n"}powered by AI
+          <p className="mt-[10px] text-center text-[17px] leading-[1.35] text-[var(--color-text-secondary)]">
+            Your daily insurance intelligence
           </p>
         </div>
 
         {/* Error message */}
         {error && (
-          <div className="mb-[20px] w-full max-w-[320px] rounded-[12px] bg-[var(--color-destructive)]/10 px-[16px] py-[12px]">
+          <div className="mb-[24px] w-full max-w-[300px] rounded-[12px] bg-[var(--color-destructive)]/10 px-[16px] py-[12px]">
             <p className="text-center text-[14px] text-[var(--color-destructive)]">{error}</p>
           </div>
         )}
 
         {/* Sign-in buttons */}
-        <div className="flex w-full max-w-[320px] flex-col gap-[12px]">
+        <div className="flex w-full max-w-[300px] flex-col gap-[12px]">
           {/* Google Sign In */}
           <button
             onClick={handleGoogleSignIn}
             disabled={isLoading !== null}
-            className="flex min-h-[52px] w-full items-center justify-center gap-[10px] rounded-[14px] bg-[var(--color-surface)] px-[20px] py-[14px] text-[17px] font-semibold text-[var(--color-text-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-all active:scale-[0.98] disabled:opacity-50"
+            className="flex h-[54px] w-full items-center justify-center gap-[12px] rounded-[12px] bg-[var(--color-surface)] text-[17px] font-semibold text-[var(--color-text-primary)] shadow-[0_1px_3px_rgba(0,0,0,0.08),0_4px_12px_rgba(0,0,0,0.05)] transition-all active:scale-[0.98] disabled:opacity-50"
           >
             {isLoading === "google" ? (
               <Loader2 className="h-[20px] w-[20px] animate-spin" />
@@ -165,36 +169,35 @@ export function AuthPage() {
           <button
             onClick={handlePhoneSignIn}
             disabled={isLoading !== null}
-            className="flex min-h-[52px] w-full items-center justify-center gap-[10px] rounded-[14px] bg-[var(--color-surface)] px-[20px] py-[14px] text-[17px] font-semibold text-[var(--color-text-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-all active:scale-[0.98] disabled:opacity-50"
+            className="flex h-[54px] w-full items-center justify-center gap-[12px] rounded-[12px] bg-[var(--color-surface)] text-[17px] font-semibold text-[var(--color-text-primary)] shadow-[0_1px_3px_rgba(0,0,0,0.08),0_4px_12px_rgba(0,0,0,0.05)] transition-all active:scale-[0.98] disabled:opacity-50"
           >
-            <PhoneIcon />
-            Continue with Phone
-          </button>
-
-          {/* Divider */}
-          <div className="flex items-center gap-[16px] py-[4px]">
-            <div className="h-[1px] flex-1 bg-[var(--color-separator)]" />
-            <span className="text-[13px] text-[var(--color-text-tertiary)]">or</span>
-            <div className="h-[1px] flex-1 bg-[var(--color-separator)]" />
-          </div>
-
-          {/* Continue as Guest */}
-          <button
-            onClick={handleContinueAsGuest}
-            disabled={isLoading !== null}
-            className="flex min-h-[52px] w-full items-center justify-center gap-[10px] rounded-[14px] border border-[var(--color-border)] bg-transparent px-[20px] py-[14px] text-[17px] font-semibold text-[var(--color-text-secondary)] transition-all active:scale-[0.98] disabled:opacity-50"
-          >
-            {isLoading === "guest" ? (
+            {isLoading === "phone" && !showPhoneSheet ? (
               <Loader2 className="h-[20px] w-[20px] animate-spin" />
             ) : (
-              "Continue as Guest"
+              <>
+                <PhoneIcon />
+                Continue with Phone
+              </>
             )}
           </button>
         </div>
 
-        {/* Guest disclaimer */}
-        <p className="mt-[24px] max-w-[280px] text-center text-[13px] leading-[1.4] text-[var(--color-text-tertiary)]">
-          Guests cannot save bookmarks.{"\n"}Sign in to save articles for later.
+        {/* Guest option - subtle link style */}
+        <button
+          onClick={handleContinueAsGuest}
+          disabled={isLoading !== null}
+          className="mt-[32px] flex items-center justify-center gap-[6px] py-[12px] text-[15px] font-medium text-[var(--color-text-tertiary)] transition-colors active:text-[var(--color-text-secondary)] disabled:opacity-50"
+        >
+          {isLoading === "guest" ? (
+            <Loader2 className="h-[16px] w-[16px] animate-spin" />
+          ) : (
+            "Continue as Guest"
+          )}
+        </button>
+
+        {/* Disclaimer - positioned at bottom */}
+        <p className="mt-auto pt-[24px] pb-[16px] max-w-[260px] text-center text-[13px] leading-[1.4] text-[var(--color-text-quaternary)]">
+          Sign in to save bookmarks and sync across devices
         </p>
       </div>
 

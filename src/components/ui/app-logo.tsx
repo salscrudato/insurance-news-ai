@@ -52,7 +52,7 @@ export function AppLogo({
         rounded && "rounded-[22%]",
         className
       )}
-      aria-label="P&C Brief logo"
+      aria-label="The Brief logo"
     >
       <defs>
         <linearGradient
@@ -106,7 +106,7 @@ export function AppLogoMark({
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={cn("shrink-0", className)}
-      aria-label="P&C Brief"
+      aria-label="The Brief"
     >
       <defs>
         <linearGradient

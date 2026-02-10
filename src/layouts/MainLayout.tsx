@@ -96,10 +96,10 @@ export function MainLayout() {
               </div>
               <div>
                 <span className="block text-[20px] font-bold tracking-[-0.5px] text-[var(--color-text-primary)]">
-                  P&C Brief
+                  The Brief
                 </span>
                 <span className="block text-[12px] tracking-[-0.02em] text-[var(--color-text-tertiary)]">
-                  Insurance News AI
+                  P&C Insurance News
                 </span>
               </div>
             </div>
@@ -265,7 +265,7 @@ export function MainLayout() {
 
   return (
     <LargeTitleContext.Provider value={{ titleRef, isVisible }}>
-      <div className="flex min-h-screen flex-col bg-[var(--color-bg-grouped)]">
+      <div className="flex h-full flex-col bg-[var(--color-bg-grouped)] overflow-hidden">
         {/* Top Navigation Bar */}
         <TopNav
           title={pageTitle}
@@ -282,7 +282,7 @@ export function MainLayout() {
                 <Outlet />
               </div>
             ) : (
-              <div className="mx-auto w-full max-w-2xl px-[var(--spacing-4)] pb-[52px] pt-[20px] flex-1 overflow-x-hidden overflow-y-auto">
+              <div className="mx-auto w-full max-w-2xl px-[var(--spacing-4)] pb-[calc(20px+var(--safe-area-inset-bottom))] pt-[8px] flex-1 overflow-x-hidden overflow-y-auto overscroll-none">
                 {/* Large Page Title - iOS style with ref for IntersectionObserver */}
                 <div ref={titleRef}>
                   <h1 className="mb-[12px] text-[32px] font-bold leading-[1.1] tracking-[-0.4px] text-[var(--color-text-primary)]">
@@ -294,9 +294,6 @@ export function MainLayout() {
             )}
           </div>
         </main>
-
-        {/* Safe area bottom padding */}
-        <div style={{ paddingBottom: 'var(--safe-area-inset-bottom)' }} />
       </div>
     </LargeTitleContext.Provider>
   )

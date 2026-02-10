@@ -2,16 +2,19 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.insurancenewsai.app',
-  appName: 'P&C Brief',
+  appName: 'The Brief',
   webDir: 'dist',
   ios: {
-    // Respect iOS safe areas automatically
-    contentInset: 'automatic',
+    // Enable scrolling but we'll control bounce via CSS
     scrollEnabled: true,
     // Prefer mobile content width
     preferredContentMode: 'mobile',
-    // Allow the webview to extend behind status bar and home indicator
-    limitsNavigationsToAppBoundDomains: false,
+    // Disable link previews
+    allowsLinkPreview: false,
+  },
+  server: {
+    // Use capacitor:// scheme for iOS
+    iosScheme: 'capacitor',
   },
   plugins: {
     StatusBar: {
@@ -22,6 +25,12 @@ const config: CapacitorConfig = {
     PushNotifications: {
       // Present push notifications when app is in foreground
       presentationOptions: ['badge', 'sound', 'alert'],
+    },
+    Keyboard: {
+      // Resize content when keyboard appears
+      resize: 'body',
+      // iOS keyboard style
+      style: 'LIGHT',
     },
   },
 };

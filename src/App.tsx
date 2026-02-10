@@ -22,7 +22,7 @@ import {
  * Protected route wrapper - redirects to /auth if not authenticated
  */
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth()
+  const { isAuthenticated, isLoading } = useAuth()
 
   // Show nothing while checking auth state
   if (isLoading) {
@@ -33,8 +33,8 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     )
   }
 
-  // Redirect to auth if not logged in
-  if (!user) {
+  // Redirect to auth if not logged in (includes local guest check)
+  if (!isAuthenticated) {
     return <Navigate to="/auth" replace />
   }
 
@@ -45,7 +45,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
  * Auth route wrapper - redirects to / if already authenticated
  */
 function AuthRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth()
+  const { isAuthenticated, isLoading } = useAuth()
 
   // Show nothing while checking auth state
   if (isLoading) {
@@ -56,8 +56,8 @@ function AuthRoute({ children }: { children: React.ReactNode }) {
     )
   }
 
-  // Redirect to home if already logged in
-  if (user) {
+  // Redirect to home if already logged in (includes local guest)
+  if (isAuthenticated) {
     return <Navigate to="/" replace />
   }
 

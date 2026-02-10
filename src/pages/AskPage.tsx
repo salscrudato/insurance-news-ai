@@ -13,9 +13,9 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { useMutation, useQuery } from "@tanstack/react-query"
-import { httpsCallable } from "firebase/functions"
 import { doc, getDoc } from "firebase/firestore"
-import { functions, db, auth } from "@/lib/firebase"
+import { signInAnonymously } from "firebase/auth"
+import { db, auth } from "@/lib/firebase"
 import { hapticLight, hapticMedium } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
@@ -24,15 +24,53 @@ import { ArticleDetailSheet } from "@/components/feed"
 import { trackEvent } from "@/lib/analytics"
 import type { Article } from "@/types/firestore"
 
+/**
+ * Ensures we have a valid Firebase auth token.
+ * If no current user, attempts anonymous sign-in first with a timeout.
+ * Returns the ID token or null if unable to authenticate (for Capacitor fallback).
+ */
+async function ensureAuthToken(): Promise<string | null> {
+  // If we already have a user, get their token
+  if (auth.currentUser) {
+    return auth.currentUser.getIdToken()
+  }
+
+  // No current user - try anonymous sign-in with timeout
+  // (Firebase Auth SDK hangs in Capacitor WebView)
+  console.log("[ensureAuthToken] No current user, attempting anonymous sign-in...")
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error("timeout")), 3000)
+  })
+
+  try {
+    const result = await Promise.race([
+      signInAnonymously(auth),
+      timeoutPromise
+    ])
+    console.log("[ensureAuthToken] Anonymous sign-in succeeded:", result.user.uid)
+    return result.user.getIdToken()
+  } catch (error) {
+    console.warn("[ensureAuthToken] Anonymous sign-in failed or timed out, proceeding without auth")
+    return null
+  }
+}
+
 // localStorage cache key for Q/A history
 const ASK_CACHE_KEY = "pcbrief_ask_cache"
 const MAX_CACHED_MESSAGES = 40 // 20 Q/A pairs = 40 messages
 
-// Streaming endpoint URL (Firebase Functions v2)
-const STREAMING_ENDPOINT =
+// Cloud Functions base URL
+const FUNCTIONS_BASE_URL =
   import.meta.env.DEV && import.meta.env.VITE_FIREBASE_USE_EMULATOR === "true"
-    ? "http://localhost:5001/insurance-news-ai/us-central1/answerQuestionRagStream"
-    : "https://us-central1-insurance-news-ai.cloudfunctions.net/answerQuestionRagStream"
+    ? "http://localhost:5001/insurance-news-ai/us-central1"
+    : "https://us-central1-insurance-news-ai.cloudfunctions.net"
+
+// Streaming endpoint URL (Firebase Functions v2)
+const STREAMING_ENDPOINT = `${FUNCTIONS_BASE_URL}/answerQuestionRagStream`
+
+// Non-streaming RAG endpoint (fallback)
+const RAG_ENDPOINT = `${FUNCTIONS_BASE_URL}/answerQuestionRag`
 
 // Types matching backend RAG response
 type RagScope = "today" | "7d" | "30d"
@@ -129,7 +167,7 @@ export function AskPage() {
     enabled: !!selectedArticleId,
   })
 
-  // RAG mutation
+  // RAG mutation - uses HTTP fetch (httpsCallable hangs in Capacitor WebView)
   const ragMutation = useMutation({
     mutationFn: async ({
       question,
@@ -137,17 +175,9 @@ export function AskPage() {
     }: {
       question: string
       history: { role: "user" | "assistant"; content: string }[]
-    }) => {
-      const answerQuestionRag = httpsCallable<
-        {
-          question: string
-          scope: RagScope
-          category: string
-          sourceIds: string[] | null
-          history: { role: "user" | "assistant"; content: string }[]
-        },
-        RagAnswerResponse
-      >(functions, "answerQuestionRag")
+    }): Promise<RagAnswerResponse> => {
+      // Get auth token (will attempt anonymous sign-in if needed)
+      const token = await ensureAuthToken()
 
       // Determine source IDs
       const sourceIds =
@@ -157,14 +187,36 @@ export function AskPage() {
           ? userPrefs.enabledSourceIds
           : null
 
-      const result = await answerQuestionRag({
-        question,
-        scope,
-        category: "all",
-        sourceIds,
-        history,
+      // Build headers - only include Authorization if we have a token
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      }
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`
+      }
+
+      const response = await fetch(RAG_ENDPOINT, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          data: {
+            question,
+            scope,
+            category: "all",
+            sourceIds,
+            history,
+          },
+        }),
       })
-      return result.data
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error?.message || `HTTP ${response.status}`)
+      }
+
+      const json = await response.json()
+      // Firebase callable functions wrap response in { result: ... }
+      return json.result || json
     },
   })
 
@@ -188,11 +240,8 @@ export function AskPage() {
       history: { role: "user" | "assistant"; content: string }[],
       assistantMessageId: string
     ): Promise<boolean> => {
-      // Get auth token
-      const token = await auth.currentUser?.getIdToken()
-      if (!token) {
-        throw new Error("Not authenticated")
-      }
+      // Get auth token (will attempt anonymous sign-in if needed)
+      const token = await ensureAuthToken()
 
       // Determine source IDs
       const sourceIds =
@@ -206,12 +255,17 @@ export function AskPage() {
       const abortController = new AbortController()
       abortControllerRef.current = abortController
 
+      // Build headers - only include Authorization if we have a token
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      }
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`
+      }
+
       const response = await fetch(STREAMING_ENDPOINT, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers,
         body: JSON.stringify({
           question,
           scope,
@@ -388,7 +442,8 @@ export function AskPage() {
           })
         }
       } catch (streamError) {
-        console.warn("Streaming failed, falling back to non-streaming:", streamError)
+        const streamErrMsg = streamError instanceof Error ? streamError.message : String(streamError)
+        console.warn("Streaming failed, falling back to non-streaming:", streamErrMsg)
 
         // Reset the assistant message for fallback
         setMessages((prev) =>
@@ -400,7 +455,8 @@ export function AskPage() {
         try {
           await fallbackToNonStreaming(question, history, assistantMessageId)
         } catch (fallbackError) {
-          console.error("RAG error:", fallbackError)
+          const fallbackErrMsg = fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+          console.error("RAG error:", fallbackErrMsg)
 
           // Update the assistant message to show error
           setMessages((prev) =>
@@ -576,7 +632,7 @@ function EmptyState({ onSuggestionClick }: EmptyStateProps) {
 
       {/* Headline - tighter spacing */}
       <h2 className="text-[22px] font-bold tracking-[-0.5px] text-[var(--color-text-primary)] mb-[6px] text-center">
-        Ask P&C Brief
+        Ask The Brief
       </h2>
       <p className="text-[15px] text-[var(--color-text-secondary)] text-center leading-[1.5] max-w-[260px] mb-[32px]">
         Get answers grounded in your curated news sources

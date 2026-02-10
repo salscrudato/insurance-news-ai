@@ -12,7 +12,7 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from "react"
 import { useSearchParams } from "react-router-dom"
 import { Inbox, Search } from "lucide-react"
-import { useArticles, useSources, type ArticleFilters } from "@/lib/hooks"
+import { useArticles, useSources, type ArticleFilters, type ArticleFromApi } from "@/lib/hooks"
 import {
   CategoryChips,
   TimeWindowToggle,
@@ -24,7 +24,7 @@ import {
 } from "@/components/feed"
 import { EmptyState, ErrorState } from "@/components/ui"
 import { hapticMedium } from "@/lib/haptics"
-import type { Article, SourceCategory } from "@/types/firestore"
+import type { SourceCategory } from "@/types/firestore"
 
 /** Prefetch articles when trigger is within this distance from viewport */
 const INFINITE_SCROLL_ROOT_MARGIN = 300
@@ -56,7 +56,7 @@ export function FeedPage() {
   }, [searchParams, setSearchParams])
 
   // Article detail sheet state
-  const [selectedArticle, setSelectedArticle] = useState<Article | null>(null)
+  const [selectedArticle, setSelectedArticle] = useState<ArticleFromApi | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
 
   // Build filters object
@@ -122,7 +122,7 @@ export function FeedPage() {
     [isFetchingNextPage, hasNextPage, fetchNextPage]
   )
 
-  const handleSelectArticle = (article: Article) => {
+  const handleSelectArticle = (article: ArticleFromApi) => {
     hapticMedium()
     setSelectedArticle(article)
     setSheetOpen(true)

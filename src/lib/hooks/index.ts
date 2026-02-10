@@ -3,7 +3,7 @@
  */
 
 export { useTodayBrief, type TodayBriefResponse, type TopStoryWithArticle } from "./use-today-brief"
-export { useArticles, useSources, type ArticleFilters } from "./use-articles"
+export { useArticles, useSources, type ArticleFilters, type ArticleFromApi } from "./use-articles"
 export {
   useBookmarks,
   useIsBookmarked,

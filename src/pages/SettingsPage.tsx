@@ -98,7 +98,7 @@ export function SettingsPage() {
         {permissionStatus === "denied" ? (
           <SectionFooter inset>
             Notifications are turned off. To enable, go to{" "}
-            <span className="font-medium">Settings → P&C Brief → Notifications</span>.
+            <span className="font-medium">Settings → The Brief → Notifications</span>.
           </SectionFooter>
         ) : !pushSupported && !pushLoading ? (
           <SectionFooter inset>
@@ -219,7 +219,7 @@ export function SettingsPage() {
       {/* Footer */}
       <footer className="pt-[8px] text-center">
         <p className="text-[13px] text-[var(--color-text-tertiary)]">
-          P&C Brief
+          The Brief
         </p>
       </footer>
 
