@@ -9,7 +9,7 @@
  * - Multi-query merge for >10 sources handled in useArticles hook
  */
 
-import { useState, useMemo, useRef, useCallback, useEffect } from "react"
+import { useState, useMemo, useRef, useCallback } from "react"
 import { useSearchParams } from "react-router-dom"
 import { Inbox, Search } from "lucide-react"
 import { useArticles, useSources, type ArticleFilters, type ArticleFromApi } from "@/lib/hooks"
@@ -36,19 +36,24 @@ export function FeedPage() {
   const [category, setCategory] = useState<SourceCategory | "all">("all")
   const [timeWindow, setTimeWindow] = useState<"24h" | "7d" | "all">("7d")
   const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([])
-  const [searchQuery, setSearchQuery] = useState(() => searchParams.get("q") || "")
+  // Search query — URL param is source of truth for external navigation,
+  // local state provides fast typing feedback
+  const urlQueryParam = searchParams.get("q") || ""
+  const [searchQuery, setSearchQueryRaw] = useState(urlQueryParam)
+  const [lastSyncedParam, setLastSyncedParam] = useState(urlQueryParam)
 
-  // Sync search query with URL
-  useEffect(() => {
-    const urlQuery = searchParams.get("q") || ""
-    if (urlQuery && urlQuery !== searchQuery) {
-      setSearchQuery(urlQuery)
+  // Sync when URL param changes externally (e.g. topic link from Today page)
+  if (urlQueryParam !== lastSyncedParam) {
+    setLastSyncedParam(urlQueryParam)
+    if (urlQueryParam) {
+      setSearchQueryRaw(urlQueryParam)
     }
-  }, [searchParams])
+  }
+
 
   // Clear URL param when search is cleared
   const handleSearchChange = useCallback((value: string) => {
-    setSearchQuery(value)
+    setSearchQueryRaw(value)
     if (!value && searchParams.has("q")) {
       searchParams.delete("q")
       setSearchParams(searchParams, { replace: true })
@@ -130,24 +135,24 @@ export function FeedPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-y-auto">
-      {/* Sticky filters header - stable height, directly below TopNav */}
+      {/* Sticky filters header - stable height, glass background, hairline bottom */}
       <header
-        className="glass-nav sticky top-0 z-30 px-[var(--spacing-4)] pt-[12px] pb-[12px] border-b border-[var(--color-separator)]"
+        className="glass-nav sticky top-0 z-30 px-[var(--spacing-4)] pt-[10px] pb-[10px] border-b-[0.5px] border-[var(--color-separator)]"
       >
         {/* Search */}
-        <div className="mb-[10px]">
+        <div className="mb-[8px]">
           <SearchBar value={searchQuery} onChange={handleSearchChange} />
         </div>
 
-        {/* Category chips - horizontally scrollable, stable 30px height */}
+        {/* Category chips - horizontally scrollable, stable height */}
         <div className="h-[30px]">
           <CategoryChips value={category} onChange={setCategory} />
         </div>
 
         {/* Time + Sources row - stable height with iOS segmented control */}
-        <div className="mt-[10px] flex items-center gap-[6px] h-[32px]">
+        <div className="mt-[8px] flex items-center gap-[4px] h-[30px]">
           <TimeWindowToggle value={timeWindow} onChange={setTimeWindow} />
-          <div className="h-[16px] w-px bg-[var(--color-separator-opaque)] mx-[2px]" />
+          <div className="h-[14px] w-[0.5px] bg-[var(--color-separator-opaque)] mx-[4px]" />
           <SourceFilter
             sources={sources}
             selectedIds={selectedSourceIds}
@@ -157,10 +162,10 @@ export function FeedPage() {
       </header>
 
       {/* Articles list */}
-      <main className="flex-1 px-[var(--spacing-4)] py-[16px]">
+      <main className="flex-1 px-[var(--spacing-4)] pt-[14px] pb-[calc(14px+var(--safe-area-inset-bottom))]">
         {/* Loading state - show skeletons */}
         {isLoading && (
-          <div className="space-y-[12px]">
+          <div className="space-y-[14px]">
             {Array.from({ length: 5 }).map((_, i) => (
               <ArticleCardSkeleton key={i} />
             ))}
@@ -169,7 +174,7 @@ export function FeedPage() {
 
         {/* Error state - vertically centered */}
         {error && !filteredArticles.length && (
-          <div className="flex min-h-[40vh] items-center justify-center">
+          <div className="flex min-h-[50vh] items-center justify-center">
             <ErrorState
               title="Unable to load articles"
               description="Check your connection and try again."
@@ -180,7 +185,7 @@ export function FeedPage() {
 
         {/* Empty state - vertically centered */}
         {!isLoading && !error && filteredArticles.length === 0 && (
-          <div className="flex min-h-[40vh] items-center justify-center">
+          <div className="flex min-h-[50vh] items-center justify-center">
             <EmptyState
               icon={searchQuery ? Search : Inbox}
               title={searchQuery ? "No results" : "No articles"}
@@ -195,7 +200,7 @@ export function FeedPage() {
 
         {/* Article cards */}
         {!isLoading && filteredArticles.length > 0 && (
-          <div className="space-y-[12px]">
+          <div className="space-y-[14px]">
             {filteredArticles.map((article) => (
               <ArticleCard
                 key={article.id}
@@ -208,10 +213,10 @@ export function FeedPage() {
 
         {/* Load more trigger - positioned well ahead of viewport edge */}
         {hasNextPage && !searchQuery && (
-          <div ref={loadMoreRef} className="py-[24px]">
+          <div ref={loadMoreRef} className="py-[20px]">
             {isFetchingNextPage && (
               <div className="flex justify-center">
-                <div className="h-[18px] w-[18px] rounded-full border-[2px] border-[var(--color-accent)] border-t-transparent spinner" />
+                <div className="h-[16px] w-[16px] rounded-full border-[1.5px] border-[var(--color-text-quaternary)] border-t-transparent spinner" />
               </div>
             )}
           </div>
@@ -219,7 +224,7 @@ export function FeedPage() {
 
         {/* End of list indicator */}
         {!hasNextPage && filteredArticles.length > 0 && !searchQuery && (
-          <p className="py-[32px] text-center text-[13px] text-[var(--color-text-quaternary)]">
+          <p className="py-[28px] text-center text-[12px] font-medium tracking-[-0.04px] text-[var(--color-text-quaternary)]">
             You're all caught up
           </p>
         )}

@@ -1,5 +1,6 @@
 /**
- * Bookmarks Page - Saved articles list
+ * Bookmarks Page - Saved articles reading list
+ * Apple-inspired iOS "Reading List" design with premium polish
  */
 
 import { useState } from "react"
@@ -14,10 +15,10 @@ import {
   Separator,
   SHEET_TOKENS,
   SheetHeaderBlock,
-  SheetSection,
   SheetSnippet,
   SheetActions,
   SheetIconButton,
+  SheetAICard,
 } from "@/components/ui"
 import { useBookmarks, useToggleBookmark } from "@/lib/hooks"
 import { useAuth } from "@/lib/auth-context"
@@ -35,44 +36,44 @@ function formatDate(date: Date): string {
 
 function BookmarkRowSkeleton() {
   return (
-    <div className="flex min-h-[68px] items-center gap-[12px] px-[16px] py-[12px]">
+    <div className="flex min-h-[68px] items-center gap-[14px] px-[16px] py-[12px]">
       <div className="min-w-0 flex-1">
         <div className="mb-[6px] h-[16px] w-4/5 rounded-[4px] skeleton-shimmer" />
         <div className="h-[13px] w-2/5 rounded-[3px] skeleton-shimmer" />
       </div>
-      <div className="h-[36px] w-[36px] shrink-0 rounded-full skeleton-shimmer" />
+      <div className="h-[44px] w-[44px] shrink-0 rounded-full skeleton-shimmer" />
     </div>
   )
 }
 
 /**
- * Polished empty state with CTA
+ * Polished empty state - calm, centered, App Store quality
  */
-function EmptyState({ onBrowseFeed }: { onBrowseFeed: () => void }) {
+function EmptyBookmarks({ onBrowseFeed }: { onBrowseFeed: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center py-[56px] text-center">
-      {/* Icon container with subtle gradient */}
-      <div className="mb-[20px] flex h-[72px] w-[72px] items-center justify-center rounded-[20px] bg-gradient-to-br from-[var(--color-fill-tertiary)] to-[var(--color-fill-secondary)]">
-        <BookmarkIcon className="h-[32px] w-[32px] text-[var(--color-text-tertiary)]" strokeWidth={1.5} />
+    <div className="flex flex-col items-center justify-center py-[48px] text-center">
+      {/* Icon container - iOS grouped card feel */}
+      <div className="mb-[18px] flex h-[64px] w-[64px] items-center justify-center rounded-[16px] bg-[var(--color-fill-quaternary)] shadow-[inset_0_0_0_0.5px_var(--color-separator-light)]">
+        <BookmarkIcon className="h-[28px] w-[28px] text-[var(--color-text-quaternary)]" strokeWidth={1.5} />
       </div>
 
       {/* Title */}
-      <h3 className="mb-[8px] text-[22px] font-bold tracking-[-0.4px] text-[var(--color-text-primary)]">
+      <h3 className="mb-[6px] text-[20px] font-semibold leading-[1.2] tracking-[-0.24px] text-[var(--color-text-primary)]">
         No Saved Articles
       </h3>
 
       {/* Description */}
-      <p className="mb-[24px] max-w-[280px] text-[15px] leading-[1.5] tracking-[-0.16px] text-[var(--color-text-secondary)]">
-        Tap the bookmark icon on any article to save it for later reading.
+      <p className="mb-[22px] max-w-[260px] text-[15px] leading-[1.45] tracking-[-0.2px] text-[var(--color-text-tertiary)]">
+        Tap the bookmark icon on any article to save it here for later.
       </p>
 
-      {/* CTA Button */}
+      {/* CTA Button - matches system button style */}
       <button
         onClick={onBrowseFeed}
-        className="group flex items-center gap-[8px] rounded-full bg-[var(--color-accent)] px-[24px] py-[14px] text-[16px] font-semibold text-white shadow-[0_2px_12px_rgba(10,132,255,0.3)] transition-all duration-200 active:scale-[0.96] active:shadow-[0_1px_6px_rgba(10,132,255,0.2)]"
+        className="group flex items-center gap-[7px] rounded-full bg-[var(--color-accent)] px-[22px] py-[12px] text-[15px] font-semibold tracking-[-0.2px] text-white shadow-[var(--shadow-button)] transition-all duration-[var(--duration-fast)] ease-[var(--ease-ios)] active:scale-[0.97] active:bg-[var(--color-accent-pressed)] active:shadow-[var(--shadow-button-active)]"
       >
         <span>Browse Feed</span>
-        <ArrowRight className="h-[18px] w-[18px] transition-transform duration-200 group-hover:translate-x-[2px]" strokeWidth={2} />
+        <ArrowRight className="h-[16px] w-[16px] transition-transform duration-[var(--duration-fast)] ease-[var(--ease-ios)] group-hover:translate-x-[2px]" strokeWidth={2.2} />
       </button>
     </div>
   )
@@ -90,6 +91,7 @@ function BookmarkRow({ bookmark, onSelect, onRemove, isRemoving }: BookmarkRowPr
     <div
       role="button"
       tabIndex={0}
+      aria-label={`Open ${bookmark.title} from ${bookmark.sourceName}`}
       onClick={() => onSelect(bookmark)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -97,20 +99,25 @@ function BookmarkRow({ bookmark, onSelect, onRemove, isRemoving }: BookmarkRowPr
           onSelect(bookmark)
         }
       }}
-      className="flex w-full min-h-[64px] cursor-pointer items-center gap-[12px] px-[16px] py-[12px] text-left transition-colors duration-[var(--duration-instant)] active:bg-[var(--color-fill-quaternary)]"
+      className="flex w-full min-h-[64px] cursor-pointer items-center gap-[14px] px-[16px] py-[12px] text-left transition-colors duration-[var(--duration-instant)] ease-[var(--ease-ios)] active:bg-[var(--color-fill-quaternary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-accent)]"
     >
       <div className="min-w-0 flex-1">
-        <h3 className="line-clamp-2 text-[16px] font-medium leading-[1.32] tracking-[-0.24px] text-[var(--color-text-primary)]">
+        <h3 className="headline-text line-clamp-2 text-[16px] font-semibold leading-[1.32] tracking-[-0.28px] text-[var(--color-text-primary)]">
           {bookmark.title}
         </h3>
-        <p className="mt-[5px] text-[13px] tracking-[-0.08px] text-[var(--color-text-tertiary)]">
-          <span className="font-medium text-[var(--color-text-secondary)]">{bookmark.sourceName}</span>
-          <span className="mx-[5px]">·</span>
-          <span>{formatDate(bookmark.bookmarkedAt.toDate())}</span>
-        </p>
+        <div className="mt-[4px] flex items-center gap-[5px]">
+          <span className="text-[12px] font-semibold tracking-[-0.08px] text-[var(--color-text-secondary)]">
+            {bookmark.sourceName}
+          </span>
+          <span className="text-[10px] leading-none text-[var(--color-text-quaternary)]">·</span>
+          <span className="text-[12px] tracking-[-0.08px] text-[var(--color-text-tertiary)]">
+            {formatDate(bookmark.bookmarkedAt.toDate())}
+          </span>
+        </div>
       </div>
       <button
-        className="flex h-[36px] w-[36px] shrink-0 items-center justify-center rounded-full transition-all duration-[var(--duration-fast)] hover:bg-[var(--color-fill-tertiary)] active:scale-[0.88] active:bg-[var(--color-fill-secondary)] disabled:opacity-50"
+        aria-label={`Remove bookmark for ${bookmark.title}`}
+        className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full -webkit-tap-highlight-color-transparent transition-all duration-[var(--duration-fast)] ease-[var(--ease-ios)] hover:bg-[var(--color-fill-tertiary)] active:scale-[0.90] active:bg-[var(--color-fill-secondary)] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
         onClick={(e) => {
           e.stopPropagation()
           hapticLight()
@@ -119,9 +126,9 @@ function BookmarkRow({ bookmark, onSelect, onRemove, isRemoving }: BookmarkRowPr
         disabled={isRemoving}
       >
         {isRemoving ? (
-          <Loader2 className="h-[17px] w-[17px] animate-spin text-[var(--color-accent)]" />
+          <Loader2 className="h-[18px] w-[18px] animate-spin text-[var(--color-accent)]" />
         ) : (
-          <BookmarkIcon className="h-[17px] w-[17px] fill-[var(--color-accent)] text-[var(--color-accent)]" />
+          <BookmarkIcon className="h-[18px] w-[18px] fill-[var(--color-accent)] text-[var(--color-accent)]" />
         )}
       </button>
     </div>
@@ -226,17 +233,17 @@ export function BookmarksPage() {
 
   return (
     <div className="space-y-[20px]">
-      {/* Description */}
-      <div className="-mt-[4px]">
-        <p className="text-[15px] leading-[1.45] tracking-[-0.16px] text-[var(--color-text-secondary)]">
+      {/* Page subtitle - matches TodayPage header pattern */}
+      <header className="-mt-[4px]">
+        <p className="text-[15px] font-normal leading-[1.45] tracking-[-0.2px] text-[var(--color-text-secondary)]">
           Your reading list
+          {!isLoading && bookmarks && bookmarks.length > 0 && (
+            <span className="text-[var(--color-text-tertiary)]">
+              {" · "}{bookmarks.length} article{bookmarks.length !== 1 ? "s" : ""}
+            </span>
+          )}
         </p>
-        {!isLoading && bookmarks && bookmarks.length > 0 && (
-          <p className="mt-[8px] text-[13px] tracking-[-0.08px] text-[var(--color-text-tertiary)]">
-            {bookmarks.length} article{bookmarks.length !== 1 ? "s" : ""} saved
-          </p>
-        )}
-      </div>
+      </header>
 
       {/* Loading state */}
       {isLoading && (
@@ -252,7 +259,7 @@ export function BookmarksPage() {
 
       {/* Empty state */}
       {!isLoading && (!bookmarks || bookmarks.length === 0) && (
-        <EmptyState onBrowseFeed={() => {
+        <EmptyBookmarks onBrowseFeed={() => {
           hapticMedium()
           navigate("/feed")
         }} />
@@ -300,57 +307,31 @@ export function BookmarksPage() {
                 title={selectedBookmark.title}
               />
 
-              {/* AI Summary if available */}
+              {/* AI Summary - uses unified SheetAICard for design consistency */}
               {selectedArticle?.ai && (
-                <div className="mb-[24px] overflow-hidden rounded-[var(--radius-2xl)] bg-[var(--color-fill-quaternary)]">
-                  <div className="border-b border-[var(--color-separator)] px-[18px] py-[16px]">
-                    <SheetSection label="TL;DR">
-                      {selectedArticle.ai.tldr}
-                    </SheetSection>
-                  </div>
-
-                  <div className="px-[18px] py-[16px]">
-                    <SheetSection label="Why It Matters">
-                      {selectedArticle.ai.whyItMatters}
-                    </SheetSection>
-                  </div>
-
-                  {/* Topics */}
-                  {selectedArticle.ai.topics.length > 0 && (
-                    <div className="flex flex-wrap gap-[6px] border-t border-[var(--color-separator)] px-[18px] py-[13px]">
-                      {selectedArticle.ai.topics.map((topic) => (
-                        <span
-                          key={topic}
-                          className="rounded-full bg-[var(--color-surface)] px-[12px] py-[6px] text-[12px] font-medium tracking-[-0.05px] text-[var(--color-text-secondary)]"
-                        >
-                          {topic}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* AI Disclaimer */}
-                  <div className="border-t border-[var(--color-separator)] px-[18px] py-[10px]">
-                    <p className="text-[11px] text-[var(--color-text-tertiary)]">
-                      Summary generated by AI. Read original source for full article.
-                    </p>
-                  </div>
-                </div>
+                <SheetAICard
+                  className={SHEET_TOKENS.sectionMargin}
+                  tldr={selectedArticle.ai.tldr}
+                  whyItMatters={selectedArticle.ai.whyItMatters}
+                  topics={selectedArticle.ai.topics}
+                />
               )}
 
-              {/* Snippet */}
-              {selectedArticle?.snippet && (
+              {/* Snippet - shown when no AI available */}
+              {selectedArticle?.snippet && !selectedArticle?.ai && (
                 <SheetSnippet>{selectedArticle.snippet}</SheetSnippet>
               )}
 
               {/* Actions */}
               <SheetActions
                 onReadArticle={handleOpenArticle}
+                primaryLabel="Read Full Article"
                 secondaryButton={
                   <SheetIconButton
                     onClick={() => handleRemoveBookmark(selectedBookmark)}
                     disabled={removingId === selectedBookmark.articleId}
                     loading={removingId === selectedBookmark.articleId}
+                    aria-label="Remove bookmark"
                   >
                     <BookmarkIcon className="h-[20px] w-[20px] fill-current" />
                   </SheetIconButton>

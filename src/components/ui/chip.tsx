@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 /**
  * Chip - iOS-style pill/tag for filters, topics, and categories
  * Following Apple HIG 2026 with refined styling and interactions
@@ -27,13 +28,13 @@ const chipVariants = cva(
         filter: [
           "bg-[var(--color-fill-tertiary)]",
           "text-[var(--color-text-secondary)]",
-          "active:bg-[var(--color-fill-secondary)] active:scale-[0.96]",
+          "active:bg-[var(--color-fill-secondary)] active:scale-[0.97]",
         ].join(" "),
         filterActive: [
           "bg-[var(--color-text-primary)]",
           "text-white",
-          "shadow-[0_1px_4px_rgba(0,0,0,0.10),0_1px_2px_rgba(0,0,0,0.06)]",
-          "active:scale-[0.96]",
+          "shadow-[0_1px_3px_rgba(0,0,0,0.12),0_0.5px_1px_rgba(0,0,0,0.06)]",
+          "active:scale-[0.97] active:opacity-90",
         ].join(" "),
         topic: [
           "bg-[var(--color-fill-quaternary)]",
@@ -43,17 +44,17 @@ const chipVariants = cva(
           "bg-[var(--color-surface)]",
           "text-[var(--color-text-secondary)]",
           "shadow-[0_0.5px_1px_rgba(0,0,0,0.04),0_0_0_0.5px_var(--color-separator)]",
-          "active:bg-[var(--color-fill-quaternary)] active:scale-[0.96]",
+          "active:bg-[var(--color-fill-quaternary)] active:scale-[0.97]",
         ].join(" "),
         accent: [
           "bg-[var(--color-accent-soft)]",
           "text-[var(--color-accent)]",
-          "active:bg-[rgba(0,122,255,0.18)] active:scale-[0.96]",
+          "active:bg-[rgba(0,122,255,0.18)] active:scale-[0.97]",
         ].join(" "),
       },
       size: {
         sm: "h-[26px] px-[10px] text-[12px] tracking-[-0.04px]",
-        default: "h-[32px] px-[14px] text-[13px] tracking-[-0.08px]",
+        default: "h-[30px] px-[13px] text-[13px] tracking-[-0.08px]",
         lg: "h-[36px] px-[16px] text-[14px] tracking-[-0.1px]",
       },
     },

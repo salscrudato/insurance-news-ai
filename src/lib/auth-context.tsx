@@ -409,7 +409,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         timeoutPromise
       ])
       console.log("[AuthContext] continueAsGuest: Firebase auth succeeded", result.user?.uid)
-    } catch (error) {
+    } catch {
       // Firebase auth failed or timed out - use local guest mode
       console.log("[AuthContext] continueAsGuest: Firebase auth failed, using local guest mode")
       localStorage.setItem(LOCAL_GUEST_KEY, JSON.stringify({
@@ -464,6 +464,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   return useContext(AuthContext)
 }

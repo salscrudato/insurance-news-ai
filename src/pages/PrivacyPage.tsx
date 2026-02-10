@@ -1,40 +1,37 @@
 /**
  * Privacy Policy Page
- * Comprehensive privacy policy for The Brief mobile application
+ * Concise, accurate privacy policy with Apple-grade reading layout
+ * Content reflects the actual data architecture: Firebase Auth/Firestore/FCM + OpenAI
  */
 
 import { ChevronLeft } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { hapticLight } from "@/lib/haptics"
+import { openUrl } from "@/lib/browser"
 
 const EFFECTIVE_DATE = "February 10, 2026"
-const COMPANY_NAME = "The Brief"
-const APP_NAME = "The Brief"
 const CONTACT_EMAIL = "privacy@pcbrief.app"
+
+/* ------------------------------------------------------------------ */
+/* Shared typography primitives for legal pages                        */
+/* ------------------------------------------------------------------ */
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="mb-[28px]">
-      <h2 className="mb-[12px] text-[17px] font-semibold tracking-[-0.24px] text-[var(--color-text-primary)]">
+    <section className="mb-[32px]">
+      <h2 className="mb-[10px] text-[17px] font-semibold leading-[1.24] tracking-[-0.4px] text-[var(--color-text-primary)]">
         {title}
       </h2>
-      <div className="space-y-[12px] text-[15px] leading-[1.5] tracking-[-0.16px] text-[var(--color-text-secondary)]">
+      <div className="space-y-[10px] text-[15px] leading-[1.55] tracking-[-0.2px] text-[var(--color-text-secondary)]">
         {children}
       </div>
     </section>
   )
 }
 
-function SubSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="mt-[16px]">
-      <h3 className="mb-[8px] text-[15px] font-medium text-[var(--color-text-primary)]">
-        {title}
-      </h3>
-      <div className="space-y-[8px]">{children}</div>
-    </div>
-  )
-}
+/* ------------------------------------------------------------------ */
+/* Page                                                                */
+/* ------------------------------------------------------------------ */
 
 export function PrivacyPage() {
   const navigate = useNavigate()
@@ -44,271 +41,162 @@ export function PrivacyPage() {
     navigate(-1)
   }
 
+  const handleEmailLink = () => {
+    openUrl(`mailto:${CONTACT_EMAIL}`)
+  }
+
   return (
-    <div className="min-h-screen bg-[var(--color-bg-grouped)]">
-      {/* Header */}
+    <div className="flex h-full flex-col bg-[var(--color-bg-grouped)]">
+      {/* ---- Sticky nav bar ---- */}
       <div
-        className="sticky top-0 z-40 bg-[var(--color-surface)]/95 backdrop-blur-xl border-b border-[var(--color-separator)]"
+        className="sticky top-0 z-40 glass-nav border-b-[0.5px] border-[var(--color-separator)]"
         style={{ paddingTop: "var(--safe-area-inset-top)" }}
       >
-        <div className="flex h-[52px] items-center px-[16px]">
+        <div className="flex h-[44px] items-center px-[16px]">
           <button
             onClick={handleBack}
-            className="flex h-[44px] w-[44px] items-center justify-center -ml-[8px] rounded-full text-[var(--color-accent)] active:bg-[var(--color-fill-tertiary)]"
+            aria-label="Go back"
+            className="flex h-[44px] w-[44px] items-center justify-center -ml-[8px] rounded-full text-[var(--color-accent)] -webkit-tap-highlight-color-transparent active:bg-[var(--color-fill-tertiary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
           >
-            <ChevronLeft className="h-[24px] w-[24px]" strokeWidth={2} />
+            <ChevronLeft className="h-[22px] w-[22px]" strokeWidth={2.5} />
           </button>
-          <h1 className="flex-1 text-center text-[17px] font-semibold tracking-[-0.24px] text-[var(--color-text-primary)] mr-[36px]">
+          <h1 className="flex-1 text-center text-[17px] font-semibold tracking-[-0.4px] text-[var(--color-text-primary)] mr-[36px]">
             Privacy Policy
           </h1>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="px-[20px] py-[24px]" style={{ paddingBottom: "calc(24px + var(--safe-area-inset-bottom))" }}>
-        {/* Last Updated */}
-        <p className="mb-[24px] text-[13px] tracking-[-0.08px] text-[var(--color-text-tertiary)]">
-          Effective Date: {EFFECTIVE_DATE}
-        </p>
-
-        <Section title="1. Introduction">
-          <p>
-            {COMPANY_NAME} ("Company," "we," "us," or "our") is committed to protecting your privacy. 
-            This Privacy Policy explains how we collect, use, disclose, and safeguard your information 
-            when you use our {APP_NAME} mobile application ("App").
+      {/* ---- Scrollable content ---- */}
+      <div
+        className="flex-1 overflow-y-auto overscroll-contain -webkit-overflow-scrolling-touch"
+      >
+        <div
+          className="mx-auto max-w-[600px] px-[20px] pt-[24px]"
+          style={{ paddingBottom: "calc(40px + var(--safe-area-inset-bottom))" }}
+        >
+          {/* Effective date */}
+          <p className="mb-[28px] text-[13px] tracking-[-0.08px] text-[var(--color-text-tertiary)]">
+            Last updated {EFFECTIVE_DATE}
           </p>
-          <p>
-            Please read this Privacy Policy carefully. By using the App, you consent to the practices 
-            described in this policy. If you do not agree with the terms of this Privacy Policy, 
-            please do not access or use the App.
-          </p>
-        </Section>
 
-        <Section title="2. Information We Collect">
-          <SubSection title="2.1 Information Collected Automatically">
-            <p>When you use the App, we may automatically collect:</p>
-            <ul className="list-disc pl-[20px] space-y-[6px]">
-              <li><strong>Device Information:</strong> Device type, operating system version, unique device identifiers, and mobile network information</li>
-              <li><strong>Usage Data:</strong> App features accessed, articles viewed, time spent in the App, and interaction patterns</li>
-              <li><strong>Log Data:</strong> IP address, browser type, access times, pages viewed, and referring URLs</li>
-              <li><strong>Analytics Data:</strong> Aggregated usage statistics to improve App performance and user experience</li>
+          {/* ---------------------------------------------------- */}
+          <Section title="1. Overview">
+            <p>
+              The Brief ("App") is committed to protecting your privacy. This policy explains what information we collect, how we use it, and what choices you have. By using the App you agree to the practices described here.
+            </p>
+          </Section>
+
+          <Section title="2. What We Collect">
+            <p>
+              <strong className="text-[var(--color-text-primary)]">Account identifiers.</strong>{" "}
+              When you use the App, Firebase Authentication creates an anonymous user ID. If you sign in with email, we also store your email address.
+            </p>
+            <p>
+              <strong className="text-[var(--color-text-primary)]">Preferences &amp; bookmarks.</strong>{" "}
+              Your notification settings, source preferences, and saved articles are stored in Cloud Firestore and linked to your account.
+            </p>
+            <p>
+              <strong className="text-[var(--color-text-primary)]">Push notification tokens.</strong>{" "}
+              If you enable notifications, we store your device push token (via Firebase Cloud Messaging) to deliver daily brief alerts.
+            </p>
+            <p>
+              <strong className="text-[var(--color-text-primary)]">Ask AI conversations.</strong>{" "}
+              Questions you submit to the Ask AI feature and the generated responses are stored in Firestore. Your questions are sent to OpenAI's API to generate answers.
+            </p>
+            <p>
+              <strong className="text-[var(--color-text-primary)]">Basic usage data.</strong>{" "}
+              We may collect general analytics (e.g. which features are used, crash reports) to improve the App.
+            </p>
+          </Section>
+
+          <Section title="3. What We Do Not Collect">
+            <p>
+              We do not collect sensitive health information, financial account details, precise location data, contacts, or any data from other apps on your device.
+            </p>
+          </Section>
+
+          <Section title="4. How We Use Your Data">
+            <ul className="list-disc pl-[20px] space-y-[4px]">
+              <li>Provide and operate the App's features (briefs, feed, bookmarks, AI chat)</li>
+              <li>Deliver push notifications you've opted into</li>
+              <li>Improve App performance and fix issues</li>
+              <li>Comply with legal obligations</li>
             </ul>
-          </SubSection>
-          <SubSection title="2.2 Information You Provide">
-            <p>We may collect information you voluntarily provide:</p>
-            <ul className="list-disc pl-[20px] space-y-[6px]">
-              <li><strong>Preferences:</strong> Notification settings, topic preferences, and reading preferences</li>
-              <li><strong>Bookmarks:</strong> Articles you save for later reading</li>
-              <li><strong>Feedback:</strong> Any feedback, suggestions, or communications you send to us</li>
+            <p className="mt-[6px]">
+              We do not sell your personal information.
+            </p>
+          </Section>
+
+          <Section title="5. Third-Party Services">
+            <p>The App relies on the following third-party services, each governed by their own privacy policies:</p>
+            <ul className="list-disc pl-[20px] space-y-[4px]">
+              <li>
+                <strong className="text-[var(--color-text-primary)]">Firebase (Google)</strong> — Authentication, Cloud Firestore database, Cloud Functions, and Firebase Cloud Messaging for push notifications.
+              </li>
+              <li>
+                <strong className="text-[var(--color-text-primary)]">OpenAI</strong> — Article summarization and the Ask AI conversational feature. Article text and your questions may be processed by OpenAI's systems.
+              </li>
+              <li>
+                <strong className="text-[var(--color-text-primary)]">Apple App Store</strong> — Distribution and app-level analytics.
+              </li>
             </ul>
-          </SubSection>
-          <SubSection title="2.3 Anonymous Authentication">
+          </Section>
+
+          <Section title="6. Data Retention">
             <p>
-              The App uses anonymous authentication provided by Firebase. This means we do not require 
-              you to create an account with personal information such as your name, email address, or 
-              phone number. Your preferences and bookmarks are associated with an anonymous identifier 
-              that is not linked to your personal identity.
+              Your account data (preferences, bookmarks, chat threads) is retained as long as your account exists. Signing out of a guest account permanently deletes associated data. Aggregated analytics may be retained for up to 26 months. You may request data deletion at any time by contacting us.
             </p>
-          </SubSection>
-        </Section>
+          </Section>
 
-        <Section title="3. How We Use Your Information">
-          <p>We use the information we collect to:</p>
-          <ul className="list-disc pl-[20px] space-y-[6px]">
-            <li>Provide, maintain, and improve the App's functionality</li>
-            <li>Personalize your experience and deliver relevant content</li>
-            <li>Send push notifications (with your consent) about daily briefings</li>
-            <li>Analyze usage patterns to enhance App performance</li>
-            <li>Detect, prevent, and address technical issues and security threats</li>
-            <li>Comply with legal obligations and enforce our Terms of Service</li>
-          </ul>
-        </Section>
+          <Section title="7. Your Controls">
+            <ul className="list-disc pl-[20px] space-y-[4px]">
+              <li>
+                <strong className="text-[var(--color-text-primary)]">Notifications:</strong> Disable daily brief notifications in Settings at any time.
+              </li>
+              <li>
+                <strong className="text-[var(--color-text-primary)]">Bookmarks:</strong> Remove individual bookmarks from your reading list.
+              </li>
+              <li>
+                <strong className="text-[var(--color-text-primary)]">Chat history:</strong> Delete Ask AI conversation threads from within the App.
+              </li>
+              <li>
+                <strong className="text-[var(--color-text-primary)]">Account:</strong> Sign out to delete all guest data, or contact us for a full data removal request.
+              </li>
+            </ul>
+          </Section>
 
-        <Section title="4. Third-Party Services">
-          <p>
-            We use third-party services that may collect information about you. These services have
-            their own privacy policies governing the use of your information:
-          </p>
-          <SubSection title="4.1 Firebase (Google)">
+          <Section title="8. Security">
             <p>
-              We use Firebase for authentication, database services, and analytics. Firebase may collect
-              device identifiers, usage data, and crash reports. For more information, see
-              Google's Privacy Policy at privacy.google.com.
+              We use reasonable technical and organizational measures to protect your data, including encryption in transit (TLS), secure cloud infrastructure with access controls, and limited personnel access. No system is perfectly secure, and we cannot guarantee absolute security.
             </p>
-          </SubSection>
-          <SubSection title="4.2 OpenAI">
+          </Section>
+
+          <Section title="9. Children's Privacy">
             <p>
-              We use OpenAI's API to generate AI-powered summaries and analysis. Article content may be
-              processed by OpenAI's systems. OpenAI's use of data is governed by their privacy policy
-              at openai.com/privacy.
+              The App is not intended for children under 13. We do not knowingly collect information from children. If you believe a child has provided us data, please contact us and we will promptly delete it.
             </p>
-          </SubSection>
-          <SubSection title="4.3 Apple App Store">
+          </Section>
+
+          <Section title="10. Changes to This Policy">
             <p>
-              If you download the App from the Apple App Store, Apple may collect certain information
-              as described in Apple's Privacy Policy at apple.com/privacy.
+              We may update this Privacy Policy from time to time. Material changes will be reflected with an updated "Last updated" date. Continued use of the App after changes constitutes acceptance.
             </p>
-          </SubSection>
-        </Section>
+          </Section>
 
-        <Section title="5. Data Sharing and Disclosure">
-          <p>We may share your information in the following circumstances:</p>
-          <ul className="list-disc pl-[20px] space-y-[6px]">
-            <li><strong>Service Providers:</strong> With third-party vendors who perform services on our behalf (hosting, analytics, AI processing)</li>
-            <li><strong>Legal Requirements:</strong> When required by law, court order, or governmental authority</li>
-            <li><strong>Protection of Rights:</strong> To protect our rights, privacy, safety, or property, or that of our users or others</li>
-            <li><strong>Business Transfers:</strong> In connection with a merger, acquisition, or sale of assets</li>
-            <li><strong>Aggregated Data:</strong> We may share aggregated, non-identifiable information for research or analysis</li>
-          </ul>
-          <p className="mt-[12px]">
-            We do not sell your personal information to third parties.
-          </p>
-        </Section>
-
-        <Section title="6. Data Retention">
-          <p>
-            We retain your information for as long as necessary to provide the App's services and
-            fulfill the purposes described in this Privacy Policy. Specifically:
-          </p>
-          <ul className="list-disc pl-[20px] space-y-[6px]">
-            <li><strong>Anonymous User Data:</strong> Retained until you sign out or the anonymous session expires</li>
-            <li><strong>Usage Analytics:</strong> Retained in aggregated form for up to 26 months</li>
-            <li><strong>Log Data:</strong> Retained for up to 90 days for security and debugging purposes</li>
-          </ul>
-          <p className="mt-[12px]">
-            When you sign out of the App, your bookmarks and preferences are permanently deleted and
-            cannot be recovered.
-          </p>
-        </Section>
-
-        <Section title="7. Data Security">
-          <p>
-            We implement appropriate technical and organizational security measures to protect your
-            information, including:
-          </p>
-          <ul className="list-disc pl-[20px] space-y-[6px]">
-            <li>Encryption of data in transit using TLS/SSL</li>
-            <li>Secure cloud infrastructure with access controls</li>
-            <li>Regular security assessments and monitoring</li>
-            <li>Limited access to personal data by authorized personnel only</li>
-          </ul>
-          <p className="mt-[12px]">
-            However, no method of transmission over the Internet or electronic storage is 100% secure.
-            While we strive to protect your information, we cannot guarantee its absolute security.
-          </p>
-        </Section>
-
-        <Section title="8. Your Rights and Choices">
-          <SubSection title="8.1 Push Notifications">
+          <Section title="11. Contact">
             <p>
-              You can opt out of push notifications at any time through the App's settings or your
-              device's notification settings.
+              Questions or concerns? Reach us at{" "}
+              <button
+                onClick={handleEmailLink}
+                className="font-medium text-[var(--color-accent)] active:opacity-70"
+              >
+                {CONTACT_EMAIL}
+              </button>
+              .
             </p>
-          </SubSection>
-          <SubSection title="8.2 Data Deletion">
-            <p>
-              You can delete your data by signing out of the App. This will permanently remove your
-              bookmarks and preferences. For additional data deletion requests, contact us at {CONTACT_EMAIL}.
-            </p>
-          </SubSection>
-          <SubSection title="8.3 Access and Portability">
-            <p>
-              You may request access to or a copy of your data by contacting us. We will respond to
-              your request within 30 days.
-            </p>
-          </SubSection>
-        </Section>
-
-        <Section title="9. Children's Privacy">
-          <p>
-            The App is not intended for children under the age of 13. We do not knowingly collect
-            personal information from children under 13. If we become aware that we have collected
-            personal information from a child under 13, we will take steps to delete such information
-            promptly. If you believe we have collected information from a child under 13, please
-            contact us at {CONTACT_EMAIL}.
-          </p>
-        </Section>
-
-        <Section title="10. International Data Transfers">
-          <p>
-            Your information may be transferred to and processed in countries other than your country
-            of residence, including the United States. These countries may have data protection laws
-            that differ from those in your country. By using the App, you consent to the transfer of
-            your information to these countries.
-          </p>
-          <p>
-            We take appropriate safeguards to ensure that your information remains protected in
-            accordance with this Privacy Policy when transferred internationally.
-          </p>
-        </Section>
-
-        <Section title="11. California Privacy Rights (CCPA)">
-          <p>
-            If you are a California resident, you have additional rights under the California Consumer
-            Privacy Act (CCPA):
-          </p>
-          <ul className="list-disc pl-[20px] space-y-[6px]">
-            <li><strong>Right to Know:</strong> You can request information about the categories and specific pieces of personal information we have collected</li>
-            <li><strong>Right to Delete:</strong> You can request deletion of your personal information</li>
-            <li><strong>Right to Opt-Out:</strong> You can opt out of the sale of your personal information (we do not sell personal information)</li>
-            <li><strong>Right to Non-Discrimination:</strong> We will not discriminate against you for exercising your privacy rights</li>
-          </ul>
-          <p className="mt-[12px]">
-            To exercise these rights, contact us at {CONTACT_EMAIL}.
-          </p>
-        </Section>
-
-        <Section title="12. European Privacy Rights (GDPR)">
-          <p>
-            If you are located in the European Economic Area (EEA), United Kingdom, or Switzerland,
-            you have additional rights under the General Data Protection Regulation (GDPR):
-          </p>
-          <ul className="list-disc pl-[20px] space-y-[6px]">
-            <li><strong>Right of Access:</strong> Request access to your personal data</li>
-            <li><strong>Right to Rectification:</strong> Request correction of inaccurate data</li>
-            <li><strong>Right to Erasure:</strong> Request deletion of your personal data</li>
-            <li><strong>Right to Restrict Processing:</strong> Request limitation of processing</li>
-            <li><strong>Right to Data Portability:</strong> Request transfer of your data</li>
-            <li><strong>Right to Object:</strong> Object to processing based on legitimate interests</li>
-            <li><strong>Right to Withdraw Consent:</strong> Withdraw consent at any time</li>
-          </ul>
-          <p className="mt-[12px]">
-            Our legal basis for processing your information includes: consent, performance of a
-            contract, compliance with legal obligations, and legitimate interests.
-          </p>
-        </Section>
-
-        <Section title="13. Changes to This Privacy Policy">
-          <p>
-            We may update this Privacy Policy from time to time. We will notify you of any material
-            changes by posting the new Privacy Policy in the App and updating the "Effective Date"
-            at the top. Your continued use of the App after any changes constitutes acceptance of
-            the updated Privacy Policy.
-          </p>
-          <p>
-            We encourage you to review this Privacy Policy periodically for any changes.
-          </p>
-        </Section>
-
-        <Section title="14. Contact Us">
-          <p>
-            If you have any questions, concerns, or requests regarding this Privacy Policy or our
-            data practices, please contact us at:
-          </p>
-          <p className="mt-[8px] font-medium text-[var(--color-text-primary)]">
-            {COMPANY_NAME}<br />
-            Email: {CONTACT_EMAIL}
-          </p>
-          <p className="mt-[12px]">
-            For data protection inquiries in the European Union, you may also contact your local
-            data protection authority.
-          </p>
-        </Section>
-
-        {/* Footer spacing */}
-        <div className="h-[20px]" />
+          </Section>
+        </div>
       </div>
     </div>
   )
 }
-

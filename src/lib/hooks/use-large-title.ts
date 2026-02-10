@@ -7,7 +7,7 @@
 
 import { useRef, useState, useEffect, type RefObject } from "react"
 
-// Nav bar height (44px) - must match TopNav component
+// Nav bar height - must match TopNav component's inner bar height (44px)
 const NAV_HEIGHT = 44
 
 interface UseLargeTitleResult {
@@ -34,7 +34,7 @@ export function useLargeTitle(threshold = 0.1): UseLargeTitleResult {
 
     // Get safe area inset for accurate rootMargin calculation
     const safeAreaTop = parseInt(
-      getComputedStyle(document.documentElement).getPropertyValue('--safe-area-top') || '0',
+      getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-top') || '0',
       10
     ) || 0
 
@@ -89,7 +89,7 @@ export function useLargeTitleWithScroll(
 
     // Get safe area inset for accurate rootMargin calculation
     const safeAreaTop = parseInt(
-      getComputedStyle(document.documentElement).getPropertyValue('--safe-area-top') || '0',
+      getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-top') || '0',
       10
     ) || 0
 

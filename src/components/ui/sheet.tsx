@@ -21,9 +21,9 @@ const SheetOverlay = React.forwardRef<
     className={cn(
       [
         "fixed inset-0 z-50",
-        // Refined overlay - slightly less dark, better blur
-        "bg-black/40",
-        "backdrop-blur-[12px] [-webkit-backdrop-filter:blur(12px)]",
+        // Apple-style dim overlay - light, non-distracting
+        "bg-black/30",
+        "backdrop-blur-[8px] [-webkit-backdrop-filter:blur(8px)]",
         // Animations
         "data-[state=open]:animate-in data-[state=closed]:animate-out",
         "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
@@ -79,7 +79,7 @@ const sheetVariants = cva(
         right: [
           "inset-y-0 right-0",
           "h-full w-[85%] max-w-[360px]",
-          "rounded-l-[var(--radius-2xl)]",
+          "rounded-l-[var(--radius-3xl)]",
           "data-[state=closed]:slide-out-to-right",
           "data-[state=open]:slide-in-from-right",
         ].join(" "),
@@ -120,7 +120,7 @@ const SheetContent = React.forwardRef<
             className={cn(
               [
                 "absolute z-10",
-                "flex h-[36px] w-[36px] items-center justify-center",
+                "flex h-[44px] w-[44px] items-center justify-center",
                 "rounded-full",
                 "bg-[var(--color-fill-tertiary)]",
                 "text-[var(--color-text-secondary)]",

@@ -3,7 +3,7 @@
  *
  * Apple-inspired design with premium information density:
  * - Clear header with AI badge and timestamp
- * - Executive summary with key themes chips
+ * - Executive summary with structured, scannable bullets
  * - Top stories carousel with proper image fallbacks
  * - Category sections with subtle icons (2-4 bullets)
  * - Tappable topics that filter Feed
@@ -12,7 +12,7 @@
 
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Newspaper, Sparkles, ExternalLink } from "lucide-react"
+import { Newspaper, Sparkles } from "lucide-react"
 import { useTodayBrief, type TopStoryWithArticle } from "@/lib/hooks/use-today-brief"
 import {
   TodayScreenSkeleton,
@@ -43,19 +43,37 @@ function formatUpdateTime(createdAt: { toDate?: () => Date } | null): string {
     const ampm = hours >= 12 ? "PM" : "AM"
     const displayHours = hours % 12 || 12
     const displayMinutes = minutes.toString().padStart(2, "0")
-    return `Updated ${displayHours}:${displayMinutes} ${ampm} ET`
+    return `${displayHours}:${displayMinutes} ${ampm} ET`
   } catch {
     return "Updated this morning"
   }
 }
 
 /**
- * Strip citation brackets from bullet text
- * The AI includes article IDs like [f7fd4c2019240531] which we don't want to display
+ * Strip citation brackets from bullet text.
+ * The AI includes article IDs like [f7fd4c2019240531] which we don't want to display.
  */
 function stripCitations(text: string): string {
-  // Remove patterns like [hexId] or [alphanumericId] at the end or within text
   return text.replace(/\s*\[[a-f0-9]{10,}\]/gi, "").trim()
+}
+
+/**
+ * Split an executive summary bullet into headline + detail.
+ * Expects format: "Headline — Detail sentence."
+ * Falls back to the full text if no em-dash is found.
+ */
+function parseBullet(raw: string): { headline: string; detail: string } {
+  const cleaned = stripCitations(raw)
+  // Try em-dash first, then en-dash
+  const sep = cleaned.includes(" \u2014 ") ? " \u2014 " : cleaned.includes(" \u2013 ") ? " \u2013 " : null
+  if (sep) {
+    const idx = cleaned.indexOf(sep)
+    return {
+      headline: cleaned.slice(0, idx).trim(),
+      detail: cleaned.slice(idx + sep.length).trim(),
+    }
+  }
+  return { headline: "", detail: cleaned }
 }
 
 export function TodayPage() {
@@ -70,16 +88,9 @@ export function TodayPage() {
     setSheetOpen(true)
   }
 
-  // Navigate to Feed with search query for the topic
   const handleTopicClick = (topic: string) => {
     hapticLight()
     navigate(`/feed?q=${encodeURIComponent(topic)}`)
-  }
-
-  // Navigate to Sources page
-  const handleSourcesClick = () => {
-    hapticLight()
-    navigate("/sources")
   }
 
   // Loading state (only show skeleton if no cached data)
@@ -92,7 +103,7 @@ export function TodayPage() {
     return (
       <ErrorState
         title="Unable to load brief"
-        description="We couldn't fetch today's briefing. Please try again."
+        description="We couldn\u2019t fetch today\u2019s briefing. Please try again."
         onRetry={() => refetch()}
       />
     )
@@ -104,7 +115,7 @@ export function TodayPage() {
       <EmptyState
         icon={Newspaper}
         title="No brief available yet"
-        description="Check back soon for today's industry briefing."
+        description="Check back soon for today\u2019s industry briefing."
       />
     )
   }
@@ -113,51 +124,65 @@ export function TodayPage() {
 
   return (
     <>
-      <div className="space-y-[20px]">
-        {/* Date Header */}
-        <header>
-          <p className="text-[14px] font-medium tracking-[-0.15px] text-[var(--color-text-secondary)]">
+      <div className="space-y-[24px]">
+        {/* Date subheader */}
+        <header className="-mt-[4px]">
+          <p className="text-[15px] font-normal tracking-[-0.2px] text-[var(--color-text-secondary)]">
             {formatDate(brief.date)}
           </p>
         </header>
 
-        {/* Executive Summary Card */}
+        {/* ============================================================ */}
+        {/* Executive Summary Card — the hero module                      */}
+        {/* ============================================================ */}
         <Card>
-          {/* Card Header with AI Badge and Timestamp */}
-          <div className="flex items-center justify-between border-b border-[var(--color-separator)] px-[14px] py-[10px]">
-            <div className="flex items-center gap-[6px]">
-              <div className="flex h-[20px] items-center gap-[4px] rounded-full bg-[var(--color-accent-soft)] px-[8px]">
-                <Sparkles className="h-[10px] w-[10px] text-[var(--color-accent)]" strokeWidth={2.25} />
-                <span className="text-[10px] font-semibold tracking-[0.1px] text-[var(--color-accent)]">
-                  AI Daily Brief
-                </span>
-              </div>
+          {/* Card header: AI badge + timestamp */}
+          <div className="flex items-center justify-between px-[16px] py-[10px]">
+            <div className="flex items-center gap-[5px]">
+              <Sparkles className="h-[12px] w-[12px] text-[var(--color-accent)]" strokeWidth={2.25} />
+              <span className="text-[12px] font-semibold tracking-[-0.08px] text-[var(--color-accent)]">
+                AI Daily Brief
+              </span>
             </div>
-            <span className="text-[11px] font-medium tracking-[-0.1px] text-[var(--color-text-tertiary)]">
+            <span className="text-[12px] font-normal tracking-[-0.08px] text-[var(--color-text-quaternary)]">
               {formatUpdateTime(brief.createdAt)}
             </span>
           </div>
 
-          {/* Executive Summary Bullets - Improved readability */}
-          <div className="px-[14px] py-[12px]">
-            <ul className="space-y-[10px]">
-              {brief.executiveSummary.map((bullet, index) => (
-                <li
-                  key={index}
-                  className="flex gap-[10px] text-[15px] leading-[1.5] tracking-[-0.15px] text-[var(--color-text-primary)]"
-                  style={{ maxWidth: "540px" }}
-                >
-                  <span className="mt-[8px] h-[5px] w-[5px] shrink-0 rounded-full bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-indigo)]" />
-                  <span>{stripCitations(bullet)}</span>
-                </li>
-              ))}
+          {/* Hairline separator */}
+          <div className="mx-[16px] h-[0.5px] bg-[var(--color-separator)]" />
+
+          {/* Executive summary bullets */}
+          <div className="px-[16px] py-[14px]">
+            <ul className="space-y-[14px]">
+              {brief.executiveSummary.map((bullet, index) => {
+                const { headline, detail } = parseBullet(bullet)
+                return (
+                  <li key={index} className="flex gap-[10px]" style={{ maxWidth: "540px" }}>
+                    <span className="mt-[7px] h-[5px] w-[5px] shrink-0 rounded-full bg-[var(--color-accent)]" />
+                    <span className="text-[15px] leading-[1.47] tracking-[-0.2px] text-[var(--color-text-primary)]">
+                      {headline ? (
+                        <>
+                          <span className="font-semibold">{headline}</span>
+                          {" \u2014 "}
+                          <span className="font-normal text-[var(--color-text-secondary)]">{detail}</span>
+                        </>
+                      ) : (
+                        detail
+                      )}
+                    </span>
+                  </li>
+                )
+              })}
             </ul>
           </div>
         </Card>
 
-        {/* Top Stories */}
+        {/* ============================================================ */}
+        {/* Top Stories Carousel                                          */}
+        {/* ============================================================ */}
         {topStoriesWithArticles.length > 0 && (
-          <section className="space-y-[8px]">
+          <section className="space-y-[10px]">
             <SectionLabel>Top Stories</SectionLabel>
             <TopStoriesCarousel
               stories={topStoriesWithArticles}
@@ -166,22 +191,26 @@ export function TodayPage() {
           </section>
         )}
 
-        {/* Category Sections */}
-        <section className="space-y-[8px]">
+        {/* ============================================================ */}
+        {/* Category Sections                                             */}
+        {/* ============================================================ */}
+        <section className="space-y-[10px]">
           <SectionLabel>By Category</SectionLabel>
           <BriefSections sections={brief.sections} />
         </section>
 
-        {/* Topics Covered - Compact, tappable chips */}
+        {/* ============================================================ */}
+        {/* Topics Covered                                                */}
+        {/* ============================================================ */}
         {brief.topics.length > 0 && (
-          <section className="space-y-[8px]">
+          <section className="space-y-[10px]">
             <SectionLabel>Topics Covered</SectionLabel>
             <div className="flex flex-wrap gap-[6px]">
               {brief.topics.map((topic, index) => (
                 <button
                   key={index}
                   onClick={() => handleTopicClick(topic)}
-                  className="rounded-full bg-[var(--color-fill-quaternary)] px-[10px] py-[5px] text-[12px] font-medium tracking-[-0.08px] text-[var(--color-text-secondary)] transition-all duration-150 active:scale-[0.97] active:bg-[var(--color-fill-tertiary)]"
+                  className="rounded-full bg-[var(--color-fill-quaternary)] px-[11px] py-[5px] text-[13px] font-medium tracking-[-0.08px] text-[var(--color-text-secondary)] transition-all duration-[var(--duration-fast)] ease-[var(--ease-ios)] active:scale-[0.97] active:bg-[var(--color-fill-tertiary)]"
                 >
                   {topic}
                 </button>
@@ -190,25 +219,19 @@ export function TodayPage() {
           </section>
         )}
 
-        {/* Sources Footer - Readable and tappable */}
-        <footer className="border-t border-[var(--color-separator)] pt-[14px] pb-[4px]">
-          <button
-            onClick={handleSourcesClick}
-            className="group flex w-full items-center justify-between rounded-[var(--radius-md)] px-[2px] py-[4px] text-left transition-colors active:bg-[var(--color-fill-quaternary)]"
-          >
-            <div>
-              <p className="text-[13px] font-medium tracking-[-0.1px] text-[var(--color-text-secondary)]">
-                Compiled from {brief.sourcesUsed.length} sources
-              </p>
-              <p className="mt-[2px] line-clamp-1 text-[12px] tracking-[-0.04px] text-[var(--color-text-tertiary)]">
-                {brief.sourcesUsed.map((s) => s.name).join(" · ")}
-              </p>
-            </div>
-            <ExternalLink
-              className="h-[14px] w-[14px] shrink-0 text-[var(--color-text-quaternary)] transition-colors group-active:text-[var(--color-text-tertiary)]"
-              strokeWidth={1.75}
-            />
-          </button>
+        {/* ============================================================ */}
+        {/* Sources Footer                                                */}
+        {/* ============================================================ */}
+        <footer className="pt-[4px] pb-[4px]">
+          <div className="h-[0.5px] bg-[var(--color-separator)] mb-[14px]" />
+          <div className="py-[4px]">
+            <p className="text-[13px] font-medium tracking-[-0.08px] text-[var(--color-text-secondary)]">
+              Compiled from {brief.sourcesUsed.length} sources
+            </p>
+            <p className="mt-[2px] truncate text-[12px] tracking-[-0.04px] text-[var(--color-text-tertiary)]">
+              {brief.sourcesUsed.map((s) => s.name).join(" \u00b7 ")}
+            </p>
+          </div>
         </footer>
       </div>
 
@@ -221,4 +244,3 @@ export function TodayPage() {
     </>
   )
 }
-

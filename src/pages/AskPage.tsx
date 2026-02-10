@@ -1,15 +1,23 @@
 /**
- * Ask AI Page - ChatGPT-style chat interface for querying P&C news
- * Clean, minimal, message-first design with Apple-inspired polish
+ * Ask AI Page - ChatGPT-class chat interface for querying P&C news
+ * Premium, minimal, message-first design with Apple-inspired polish
  * Wired to answerQuestionRag backend endpoint with streaming support
+ *
+ * Features:
+ * - Multi-session chat management (new chat, history, delete)
+ * - localStorage persistence per session
+ * - Streaming-first with non-streaming fallback
  */
 
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import {
   ArrowUp,
   ExternalLink,
   RotateCcw,
   AlertCircle,
+  SquarePen,
+  Clock,
+  Trash2,
 } from "lucide-react"
 import { toast } from "sonner"
 import { useMutation, useQuery } from "@tanstack/react-query"
@@ -21,6 +29,7 @@ import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { useUserPreferences } from "@/lib/hooks"
 import { ArticleDetailSheet } from "@/components/feed"
+import { AppLogo } from "@/components/ui/app-logo"
 import { trackEvent } from "@/lib/analytics"
 import type { Article } from "@/types/firestore"
 
@@ -50,15 +59,135 @@ async function ensureAuthToken(): Promise<string | null> {
     ])
     console.log("[ensureAuthToken] Anonymous sign-in succeeded:", result.user.uid)
     return result.user.getIdToken()
-  } catch (error) {
+  } catch {
     console.warn("[ensureAuthToken] Anonymous sign-in failed or timed out, proceeding without auth")
     return null
   }
 }
 
-// localStorage cache key for Q/A history
-const ASK_CACHE_KEY = "pcbrief_ask_cache"
-const MAX_CACHED_MESSAGES = 40 // 20 Q/A pairs = 40 messages
+// ============================================================================
+// Session Storage
+// ============================================================================
+
+/** localStorage key for the session index (list of session metadata) */
+const SESSIONS_INDEX_KEY = "pcbrief_chat_sessions"
+/** localStorage key prefix for individual session messages */
+const SESSION_PREFIX = "pcbrief_chat_"
+/** Max sessions to keep in history */
+const MAX_SESSIONS = 30
+/** Max messages per session (kept in memory/storage) */
+const MAX_MESSAGES_PER_SESSION = 40
+
+interface ChatSession {
+  id: string
+  title: string
+  createdAt: number  // epoch ms
+  updatedAt: number  // epoch ms
+  messageCount: number
+}
+
+/** Read the session index from localStorage */
+function loadSessionIndex(): ChatSession[] {
+  try {
+    const raw = localStorage.getItem(SESSIONS_INDEX_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+/** Persist the session index */
+function saveSessionIndex(sessions: ChatSession[]) {
+  try {
+    localStorage.setItem(SESSIONS_INDEX_KEY, JSON.stringify(sessions.slice(0, MAX_SESSIONS)))
+  } catch {
+    // ignore quota errors
+  }
+}
+
+/** Load messages for a specific session */
+function loadSessionMessages(sessionId: string): Message[] {
+  try {
+    const raw = localStorage.getItem(SESSION_PREFIX + sessionId)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+/** Save messages for a specific session */
+function saveSessionMessages(sessionId: string, messages: Message[]) {
+  try {
+    const toSave = messages.slice(-MAX_MESSAGES_PER_SESSION)
+    localStorage.setItem(SESSION_PREFIX + sessionId, JSON.stringify(toSave))
+  } catch {
+    // ignore quota errors
+  }
+}
+
+/** Delete a session's messages from storage */
+function deleteSessionStorage(sessionId: string) {
+  try {
+    localStorage.removeItem(SESSION_PREFIX + sessionId)
+  } catch {
+    // ignore
+  }
+}
+
+/** Generate a unique session ID */
+function generateSessionId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
+}
+
+/** Derive a title from the first user message */
+function deriveTitle(messages: Message[]): string {
+  const firstUserMsg = messages.find((m) => m.role === "user")
+  if (!firstUserMsg) return "New conversation"
+  const text = firstUserMsg.content.trim()
+  return text.length > 60 ? text.slice(0, 57) + "..." : text
+}
+
+// ============================================================================
+// Migrate legacy single-conversation cache to session system
+// ============================================================================
+
+const LEGACY_CACHE_KEY = "pcbrief_ask_cache"
+
+function migrateLegacyCache(): string | null {
+  try {
+    const legacy = localStorage.getItem(LEGACY_CACHE_KEY)
+    if (!legacy) return null
+
+    const messages = JSON.parse(legacy) as Message[]
+    if (!Array.isArray(messages) || messages.length === 0) {
+      localStorage.removeItem(LEGACY_CACHE_KEY)
+      return null
+    }
+
+    // Create a session from legacy messages
+    const sessionId = generateSessionId()
+    const now = Date.now()
+    const session: ChatSession = {
+      id: sessionId,
+      title: deriveTitle(messages),
+      createdAt: now,
+      updatedAt: now,
+      messageCount: messages.length,
+    }
+
+    saveSessionMessages(sessionId, messages)
+    saveSessionIndex([session])
+    localStorage.removeItem(LEGACY_CACHE_KEY)
+    return sessionId
+  } catch {
+    localStorage.removeItem(LEGACY_CACHE_KEY)
+    return null
+  }
+}
 
 // Cloud Functions base URL
 const FUNCTIONS_BASE_URL =
@@ -87,7 +216,7 @@ interface RagAnswerResponse {
   answerMarkdown: string
   takeaways: string[]
   citations: RagCitation[]
-  followUps: string[]
+  followUps?: string[]   // ignored — no longer rendered
   remaining: number
 }
 
@@ -97,21 +226,31 @@ interface Message {
   content: string
   citations?: RagCitation[]
   takeaways?: string[]
-  followUps?: string[]
   error?: boolean
 }
 
 type SourceFilterMode = "my-sources" | "all-sources"
 
+// ============================================================================
+// Main Component
+// ============================================================================
+
 export function AskPage() {
   const { isAuthenticated } = useAuth()
   const { data: userPrefs } = useUserPreferences()
+
+  // Session management
+  const [sessions, setSessions] = useState<ChatSession[]>([])
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null)
 
   // Chat state
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState("")
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   // Scope & source filter state (defaults: 7 days, my sources)
   const [scope] = useState<RagScope>("7d")
@@ -128,32 +267,114 @@ export function AskPage() {
   const [isStreaming, setIsStreaming] = useState(false)
   const abortControllerRef = useRef<AbortController | null>(null)
 
-  // Load cached messages on mount
+  // ── Initialize: migrate legacy cache + load sessions ──
   useEffect(() => {
-    try {
-      const cached = localStorage.getItem(ASK_CACHE_KEY)
-      if (cached) {
-        const parsedMessages = JSON.parse(cached) as Message[]
-        if (Array.isArray(parsedMessages) && parsedMessages.length > 0) {
-          setMessages(parsedMessages)
-        }
-      }
-    } catch {
-      // Ignore cache errors
+    const migratedId = migrateLegacyCache()
+    const loadedSessions = loadSessionIndex()
+    setSessions(loadedSessions)
+
+    if (migratedId) {
+      // Open the migrated session
+      setActiveSessionId(migratedId)
+      setMessages(loadSessionMessages(migratedId))
+    } else if (loadedSessions.length > 0) {
+      // Open the most recent session
+      const mostRecent = loadedSessions[0]
+      setActiveSessionId(mostRecent.id)
+      setMessages(loadSessionMessages(mostRecent.id))
     }
+    // If no sessions, stay in empty/new chat state
   }, [])
 
-  // Save messages to cache when they change
+  // ── Persist messages to session storage when they change ──
   useEffect(() => {
-    if (messages.length === 0) return
-    try {
-      // Keep only the last MAX_CACHED_MESSAGES
-      const toCache = messages.slice(-MAX_CACHED_MESSAGES)
-      localStorage.setItem(ASK_CACHE_KEY, JSON.stringify(toCache))
-    } catch {
-      // Ignore cache errors
+    if (!activeSessionId || messages.length === 0) return
+
+    saveSessionMessages(activeSessionId, messages)
+
+    // Update session index (title, updatedAt, messageCount)
+    setSessions((prev) => {
+      const updated = prev.map((s) =>
+        s.id === activeSessionId
+          ? {
+              ...s,
+              title: deriveTitle(messages),
+              updatedAt: Date.now(),
+              messageCount: messages.length,
+            }
+          : s
+      )
+      saveSessionIndex(updated)
+      return updated
+    })
+  }, [messages, activeSessionId])
+
+  // ── New Chat ──
+  const handleNewChat = useCallback(() => {
+    hapticMedium()
+
+    // If current session is empty, just stay
+    if (messages.length === 0 && activeSessionId) return
+
+    // Abort any in-flight stream
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = null
+    setIsStreaming(false)
+
+    setMessages([])
+    setActiveSessionId(null)
+    setInputValue("")
+    setPendingRetry(null)
+    setConfirmingDelete(null)
+
+    // Focus the input
+    setTimeout(() => inputRef.current?.focus(), 100)
+
+    trackEvent("chat_new")
+  }, [messages.length, activeSessionId])
+
+  // ── Open a session from history ──
+  const handleOpenSession = useCallback((sessionId: string) => {
+    hapticLight()
+
+    // Abort any in-flight stream
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = null
+    setIsStreaming(false)
+
+    const sessionMessages = loadSessionMessages(sessionId)
+    setActiveSessionId(sessionId)
+    setMessages(sessionMessages)
+    setInputValue("")
+    setPendingRetry(null)
+    setHistoryOpen(false)
+    setConfirmingDelete(null)
+
+    trackEvent("chat_history_opened")
+  }, [])
+
+  // ── Delete a session ──
+  const handleDeleteSession = useCallback((sessionId: string) => {
+    hapticMedium()
+
+    deleteSessionStorage(sessionId)
+    setSessions((prev) => {
+      const updated = prev.filter((s) => s.id !== sessionId)
+      saveSessionIndex(updated)
+      return updated
+    })
+
+    // If the deleted session is the active one, reset to empty
+    if (sessionId === activeSessionId) {
+      setMessages([])
+      setActiveSessionId(null)
+      setInputValue("")
+      setPendingRetry(null)
     }
-  }, [messages])
+
+    setConfirmingDelete(null)
+    trackEvent("chat_deleted")
+  }, [activeSessionId])
 
   // Fetch article for detail sheet
   const { data: selectedArticle } = useQuery({
@@ -289,8 +510,7 @@ export function AskPage() {
       const decoder = new TextDecoder()
       let buffer = ""
 
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
+      for (;;) {
         const { done, value } = await reader.read()
         if (done) break
 
@@ -321,7 +541,6 @@ export function AskPage() {
                           content: data.answerMarkdown || msg.content,
                           citations: data.citations,
                           takeaways: data.takeaways,
-                          followUps: data.followUps,
                         }
                       : msg
                   )
@@ -366,7 +585,6 @@ export function AskPage() {
                 content: response.answerMarkdown,
                 citations: response.citations,
                 takeaways: response.takeaways,
-                followUps: response.followUps,
               }
             : msg
         )
@@ -387,6 +605,26 @@ export function AskPage() {
       }
 
       hapticMedium()
+
+      // ── Ensure we have an active session ──
+      let currentSessionId = activeSessionId
+      if (!currentSessionId) {
+        currentSessionId = generateSessionId()
+        const now = Date.now()
+        const newSession: ChatSession = {
+          id: currentSessionId,
+          title: question.length > 60 ? question.slice(0, 57) + "..." : question,
+          createdAt: now,
+          updatedAt: now,
+          messageCount: 0,
+        }
+        setActiveSessionId(currentSessionId)
+        setSessions((prev) => {
+          const updated = [newSession, ...prev].slice(0, MAX_SESSIONS)
+          saveSessionIndex(updated)
+          return updated
+        })
+      }
 
       // Create user message
       const userMessage: Message = {
@@ -486,8 +724,11 @@ export function AskPage() {
       ragMutation,
       isAuthenticated,
       isStreaming,
+      activeSessionId,
       streamResponse,
       fallbackToNonStreaming,
+      scope,
+      sourceFilterMode,
     ]
   )
 
@@ -525,15 +766,147 @@ export function AskPage() {
   const isEmpty = messages.length === 0
   const isLoading = ragMutation.isPending || isStreaming
 
+  // Sessions excluding the currently active one (for history list)
+  const historySessions = useMemo(
+    () => sessions.filter((s) => s.id !== activeSessionId || messages.length === 0),
+    [sessions, activeSessionId, messages.length]
+  )
+
   return (
-    <div className="flex flex-col flex-1 bg-[var(--color-bg-grouped)] overflow-hidden">
-      {/* Chat Transcript Area - clean full-height surface */}
-      <div className="flex-1 overflow-y-auto flex flex-col">
+    <div className="flex flex-col flex-1 bg-[var(--color-surface)] overflow-hidden">
+      {/* ── Action bar ── */}
+      <div className="shrink-0 flex items-center justify-between px-[12px] h-[40px] border-b border-[var(--color-separator-light)] bg-[var(--color-surface)]">
+        <button
+          onClick={() => {
+            hapticLight()
+            setHistoryOpen((v) => !v)
+          }}
+          aria-label="Chat history"
+          className={cn(
+            "flex items-center gap-[5px] h-[32px] px-[10px] rounded-[8px]",
+            "text-[13px] font-medium tracking-[-0.08px]",
+            "transition-all duration-150",
+            "-webkit-tap-highlight-color-transparent",
+            historyOpen
+              ? "bg-[var(--color-fill-tertiary)] text-[var(--color-text-primary)]"
+              : "text-[var(--color-text-tertiary)] active:bg-[var(--color-fill-tertiary)] active:scale-[0.97]"
+          )}
+        >
+          <Clock className="h-[14px] w-[14px]" strokeWidth={1.8} />
+          <span>History</span>
+        </button>
+
+        <button
+          onClick={handleNewChat}
+          aria-label="New chat"
+          className={cn(
+            "flex items-center gap-[5px] h-[32px] px-[10px] rounded-[8px]",
+            "text-[13px] font-medium tracking-[-0.08px] text-[var(--color-accent)]",
+            "transition-all duration-150",
+            "-webkit-tap-highlight-color-transparent",
+            "active:bg-[var(--color-accent-soft)] active:scale-[0.97]",
+          )}
+        >
+          <SquarePen className="h-[14px] w-[14px]" strokeWidth={1.8} />
+          <span>New Chat</span>
+        </button>
+      </div>
+
+      {/* ── Chat History Panel ── */}
+      {historyOpen && (
+        <div className="shrink-0 border-b border-[var(--color-separator-light)] bg-[var(--color-surface-secondary)] overflow-hidden">
+          <div className="max-h-[300px] overflow-y-auto overscroll-contain">
+            {historySessions.length === 0 ? (
+              <div className="px-[20px] py-[24px] text-center">
+                <p className="text-[13px] text-[var(--color-text-quaternary)]">
+                  No past conversations
+                </p>
+              </div>
+            ) : (
+              <div className="py-[4px]">
+                {historySessions.map((session, idx) => (
+                  <div key={session.id} className="relative group">
+                    <button
+                      onClick={() => handleOpenSession(session.id)}
+                      className={cn(
+                        "w-full text-left px-[16px] py-[11px] pr-[48px] flex items-center",
+                        "transition-colors duration-100",
+                        "-webkit-tap-highlight-color-transparent",
+                        session.id === activeSessionId
+                          ? "bg-[var(--color-fill-quaternary)]"
+                          : "active:bg-[var(--color-fill-quaternary)]",
+                      )}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[14px] font-medium text-[var(--color-text-primary)] leading-[1.3] truncate tracking-[-0.1px]">
+                          {session.title}
+                        </p>
+                        <p className="text-[12px] text-[var(--color-text-quaternary)] mt-[3px] tracking-[-0.02em]">
+                          {formatRelativeDate(session.updatedAt)}
+                          <span className="mx-[4px] opacity-40">&middot;</span>
+                          {Math.ceil(session.messageCount / 2)} {Math.ceil(session.messageCount / 2) === 1 ? "exchange" : "exchanges"}
+                        </p>
+                      </div>
+                    </button>
+
+                    {/* Delete */}
+                    {confirmingDelete === session.id ? (
+                      <div className="absolute right-[10px] top-1/2 -translate-y-1/2 flex items-center gap-[4px]">
+                        <button
+                          onClick={() => handleDeleteSession(session.id)}
+                          aria-label="Confirm delete"
+                          className="h-[28px] px-[10px] rounded-[7px] bg-[var(--color-destructive)] text-white text-[12px] font-medium transition-all active:scale-[0.95]"
+                        >
+                          Delete
+                        </button>
+                        <button
+                          onClick={() => setConfirmingDelete(null)}
+                          aria-label="Cancel delete"
+                          className="h-[28px] px-[8px] rounded-[7px] text-[12px] font-medium text-[var(--color-text-tertiary)] bg-[var(--color-fill-tertiary)] transition-all active:scale-[0.95]"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          hapticLight()
+                          setConfirmingDelete(session.id)
+                        }}
+                        aria-label={`Delete conversation: ${session.title}`}
+                        className={cn(
+                          "absolute right-[10px] top-1/2 -translate-y-1/2",
+                          "flex items-center justify-center h-[36px] w-[36px] rounded-[8px]",
+                          "text-[var(--color-text-quaternary)]",
+                          "transition-all duration-150",
+                          "active:bg-[var(--color-fill-tertiary)] active:text-[var(--color-destructive)]",
+                          "active:scale-[0.92]",
+                        )}
+                        style={{ WebkitTapHighlightColor: "transparent" }}
+                      >
+                        <Trash2 className="h-[13px] w-[13px]" strokeWidth={1.8} />
+                      </button>
+                    )}
+
+                    {/* Inset separator */}
+                    {idx < historySessions.length - 1 && (
+                      <div className="absolute bottom-0 left-[16px] right-[16px] h-[0.5px] bg-[var(--color-separator-light)]" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Chat Transcript Area ── */}
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto flex flex-col">
         {isEmpty ? (
-          <EmptyState onSuggestionClick={handleSend} />
+          <EmptyState />
         ) : (
-          /* Standardized spacing: 16px padding, 18px message gap for clear separation */
-          <div className="flex-1 px-[16px] py-[20px] space-y-[18px]">
+          <div className="flex-1 px-[20px] pt-[16px] pb-[8px]">
             {messages.map((message, index) => {
               // During streaming, the last assistant message might be empty or partial
               const isStreamingMessage =
@@ -558,10 +931,24 @@ export function AskPage() {
         )}
       </div>
 
-      {/* Composer - ChatGPT mobile-inspired, keyboard-safe */}
-      <div className="bg-[var(--color-surface)] border-t border-[var(--color-border)] px-[16px] pb-[max(14px,env(safe-area-inset-bottom))] pt-[12px] shrink-0">
-        {/* Input container - refined radius and padding */}
-        <div className="relative flex items-center rounded-[20px] bg-[var(--color-fill-tertiary)] border border-[var(--color-separator)] shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+      {/* ── Composer ── */}
+      <div
+        className={cn(
+          "shrink-0 px-[16px] pt-[10px]",
+          "pb-[max(12px,env(safe-area-inset-bottom))]",
+          "border-t border-[var(--color-separator-light)]",
+          "bg-[var(--color-surface)]",
+        )}
+      >
+        <div
+          className={cn(
+            "relative flex items-end rounded-[22px]",
+            "bg-[var(--color-fill-tertiary)]",
+            "border border-[var(--color-separator-opaque)]",
+            "transition-colors duration-200",
+            "has-[:focus]:border-[rgba(0,122,255,0.35)]",
+          )}
+        >
           <textarea
             ref={inputRef}
             value={inputValue}
@@ -570,24 +957,23 @@ export function AskPage() {
             placeholder="Ask about P&C news..."
             aria-label="Type your question"
             rows={1}
-            className="flex-1 resize-none overflow-hidden bg-transparent pl-[16px] pr-[48px] py-[11px] text-[16px] leading-[1.4] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:ring-0 border-none outline-none"
+            className="flex-1 resize-none overflow-hidden bg-transparent pl-[16px] pr-[44px] py-[10px] text-[16px] leading-[1.45] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-quaternary)] focus:outline-none focus:ring-0 focus:[box-shadow:none] focus-visible:outline-none focus-visible:ring-0 focus-visible:[box-shadow:none] border-none outline-none"
           />
           <button
             onClick={() => handleSend()}
             disabled={!inputValue.trim() || isLoading}
             aria-label="Send message"
             className={cn(
-              "absolute right-[5px] bottom-[5px] flex h-[32px] w-[32px] items-center justify-center rounded-full transition-all duration-150",
+              "absolute right-[6px] bottom-[6px] flex h-[30px] w-[30px] items-center justify-center rounded-full transition-all duration-150",
               inputValue.trim() && !isLoading
-                ? "bg-[var(--color-accent)] text-white shadow-sm active:scale-[0.92]"
+                ? "bg-[var(--color-text-primary)] text-white active:scale-[0.90]"
                 : "bg-[var(--color-fill-secondary)] text-[var(--color-text-quaternary)] cursor-not-allowed"
             )}
           >
-            <ArrowUp className="h-[16px] w-[16px]" strokeWidth={2.5} />
+            <ArrowUp className="h-[15px] w-[15px]" strokeWidth={2.5} />
           </button>
         </div>
-        {/* Subtle helper text */}
-        <p className="text-[11px] text-[var(--color-text-quaternary)] text-center mt-[8px] tracking-[-0.1px]">
+        <p className="text-[11px] text-[var(--color-text-quaternary)] text-center mt-[8px] tracking-[0.01em]">
           Grounded in your curated news sources
         </p>
       </div>
@@ -602,64 +988,53 @@ export function AskPage() {
   )
 }
 
-// Starter suggestion chips
-const STARTER_SUGGESTIONS = [
-  "What's happening in cyber insurance?",
-  "Latest on climate risk pricing",
-  "CAT bond market trends",
-  "InsurTech funding news",
-  "Regulatory changes this week",
-  "M&A activity in P&C",
-]
+// ============================================================================
+// Utilities
+// ============================================================================
 
-// Sub-components
+function formatRelativeDate(epochMs: number): string {
+  const now = Date.now()
+  const diffMs = now - epochMs
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
 
-interface EmptyStateProps {
-  onSuggestionClick: (suggestion: string) => void
+  if (diffMins < 1) return "Just now"
+  if (diffMins < 60) return `${diffMins}m ago`
+  if (diffHours < 24) return `${diffHours}h ago`
+  if (diffDays === 1) return "Yesterday"
+  if (diffDays < 7) return `${diffDays}d ago`
+
+  return new Date(epochMs).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  })
 }
 
-function EmptyState({ onSuggestionClick }: EmptyStateProps) {
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center px-[24px] pb-[48px]">
-      {/* Icon - refined gradient and sizing */}
-      <div className="mb-[18px] flex h-[52px] w-[52px] items-center justify-center rounded-[14px] bg-gradient-to-br from-[var(--color-fill-tertiary)] to-[var(--color-fill-secondary)] shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
-        <svg className="h-[26px] w-[26px] text-[var(--color-text-tertiary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 2a10 10 0 1 0 10 10H12V2Z" />
-          <path d="M12 12 2.1 9.1" />
-          <path d="m12 12 7.5 7.5" />
-        </svg>
-      </div>
+// ============================================================================
+// Sub-components
+// ============================================================================
 
-      {/* Headline - tighter spacing */}
+function EmptyState() {
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center px-[32px]">
+      <AppLogo size={52} className="mb-[18px]" />
       <h2 className="text-[22px] font-bold tracking-[-0.5px] text-[var(--color-text-primary)] mb-[6px] text-center">
         Ask The Brief
       </h2>
-      <p className="text-[15px] text-[var(--color-text-secondary)] text-center leading-[1.5] max-w-[260px] mb-[32px]">
-        Get answers grounded in your curated news sources
+      <p className="text-[15px] text-[var(--color-text-tertiary)] text-center leading-[1.5] max-w-[260px]">
+        Get answers grounded in your curated P&C news sources
       </p>
-
-      {/* Suggestion chips - refined styling */}
-      <div className="flex flex-wrap justify-center gap-[10px] max-w-[320px]">
-        {STARTER_SUGGESTIONS.map((suggestion, idx) => (
-          <button
-            key={idx}
-            onClick={() => {
-              hapticLight()
-              onSuggestionClick(suggestion)
-            }}
-            className="rounded-full bg-[var(--color-surface)] border border-[var(--color-separator-opaque)] px-[14px] py-[9px] text-[13px] font-medium text-[var(--color-text-secondary)] leading-[1.3] transition-all active:scale-[0.97] active:bg-[var(--color-fill-quaternary)] shadow-[0_1px_3px_rgba(0,0,0,0.04)] min-h-[44px]"
-          >
-            {suggestion}
-          </button>
-        ))}
-      </div>
     </div>
   )
 }
 
+// ============================================================================
+// Markdown Rendering
+// ============================================================================
+
 /**
- * Format inline text with bold, citations, and other inline elements
- * Returns an array of React nodes
+ * Format inline text with bold, citations, and other inline elements.
  */
 function formatInlineText(text: string): React.ReactNode[] {
   const nodes: React.ReactNode[] = []
@@ -679,14 +1054,17 @@ function formatInlineText(text: string): React.ReactNode[] {
     if (token.startsWith("**") && token.endsWith("**")) {
       // Bold text
       nodes.push(
-        <strong key={keyIdx++} className="font-semibold text-[var(--color-text-primary)]">
+        <strong key={keyIdx++} className="font-semibold text-[var(--color-text-primary)] tracking-[-0.1px]">
           {token.slice(2, -2)}
         </strong>
       )
     } else if (/^\[\d+\]$/.test(token)) {
-      // Citation - subtle superscript, muted color
+      // Citation — compact superscript with accent tint
       nodes.push(
-        <sup key={keyIdx++} className="text-[10px] font-medium text-[var(--color-text-quaternary)] ml-[1px] select-none">
+        <sup
+          key={keyIdx++}
+          className="text-[10px] font-semibold text-[var(--color-accent)] opacity-50 ml-[1px] select-none align-super leading-none"
+        >
           {token}
         </sup>
       )
@@ -703,9 +1081,9 @@ function formatInlineText(text: string): React.ReactNode[] {
 }
 
 /**
- * FormattedResponse - Lightweight markdown-style renderer for assistant responses
- * Supports: headings, numbered lists, bullet lists, paragraphs, bold, and citations
- * Designed for high readability with clear visual hierarchy
+ * FormattedResponse — Lightweight markdown renderer for assistant messages.
+ * Supports: headings, numbered lists, bullet lists, paragraphs, bold, citations.
+ * Designed for high readability with clear visual hierarchy.
  */
 function FormattedResponse({ content }: { content: string }) {
   if (!content) return null
@@ -719,33 +1097,40 @@ function FormattedResponse({ content }: { content: string }) {
         const trimmed = block.trim()
         if (!trimmed) return null
 
-        // Check for section heading (### Heading or ## Heading)
+        // Section heading (### Heading or ## Heading)
         const headingMatch = trimmed.match(/^#{2,3}\s+(.+)$/)
         if (headingMatch) {
           return (
-            <h3 key={bIdx} className="text-[16px] font-semibold text-[var(--color-text-primary)] leading-[1.35] tracking-[-0.2px] mt-[6px] first:mt-0">
-              {headingMatch[1]}
-            </h3>
+            <p
+              key={bIdx}
+              className="text-[16px] font-semibold text-[var(--color-text-primary)] leading-[1.35] tracking-[-0.2px]"
+            >
+              {formatInlineText(headingMatch[1])}
+            </p>
           )
         }
 
-        // Check for numbered list block (lines starting with 1., 2., etc.)
+        // Numbered list block (lines starting with 1., 2., etc.)
         const lines = trimmed.split("\n")
         const isNumberedList = lines.every(line => /^\d+\.\s/.test(line.trim()) || line.trim() === "")
         if (isNumberedList && lines.some(line => /^\d+\.\s/.test(line.trim()))) {
           return (
             <ol key={bIdx} className="space-y-[10px] list-none">
               {lines.map((line, lIdx) => {
-                const match = line.trim().match(/^(\d+)\.\s*\*\*(.+?)\*\*:?\s*(.*)$/)
-                if (match) {
-                  // Numbered item with bold header: "1. **Title**: description"
-                  const [, num, title, rest] = match
+                const boldMatch = line.trim().match(/^(\d+)\.\s*\*\*(.+?)\*\*:?\s*(.*)$/)
+                if (boldMatch) {
+                  // "1. **Title**: description"
+                  const [, num, title, rest] = boldMatch
                   return (
                     <li key={lIdx} className="flex gap-[8px]">
-                      <span className="text-[15px] font-medium text-[var(--color-text-tertiary)] w-[18px] shrink-0 text-right">{num}.</span>
-                      <div className="flex-1">
-                        <span className="text-[15px] font-semibold text-[var(--color-text-primary)] leading-[1.5]">{title}</span>
-                        {rest && <span className="text-[15px] leading-[1.65] text-[var(--color-text-secondary)]"> {formatInlineText(rest.trim())}</span>}
+                      <span className="text-[15px] leading-[1.6] font-medium text-[var(--color-text-quaternary)] w-[18px] shrink-0 text-right tabular-nums">{num}.</span>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-[15px] font-semibold text-[var(--color-text-primary)] leading-[1.6]">{title}</span>
+                        {rest && (
+                          <span className="text-[15px] leading-[1.6] text-[var(--color-text-secondary)]">
+                            {" "}{formatInlineText(rest.trim())}
+                          </span>
+                        )}
                       </div>
                     </li>
                   )
@@ -755,8 +1140,8 @@ function FormattedResponse({ content }: { content: string }) {
                 if (simpleMatch) {
                   return (
                     <li key={lIdx} className="flex gap-[8px]">
-                      <span className="text-[15px] font-medium text-[var(--color-text-tertiary)] w-[18px] shrink-0 text-right">{simpleMatch[1]}.</span>
-                      <span className="flex-1 text-[15px] leading-[1.65] text-[var(--color-text-primary)]">{formatInlineText(simpleMatch[2])}</span>
+                      <span className="text-[15px] leading-[1.6] font-medium text-[var(--color-text-quaternary)] w-[18px] shrink-0 text-right tabular-nums">{simpleMatch[1]}.</span>
+                      <span className="flex-1 text-[15px] leading-[1.6] text-[var(--color-text-primary)]">{formatInlineText(simpleMatch[2])}</span>
                     </li>
                   )
                 }
@@ -766,18 +1151,18 @@ function FormattedResponse({ content }: { content: string }) {
           )
         }
 
-        // Check for bullet list (lines starting with - or •)
+        // Bullet list (lines starting with - or •)
         const isBulletList = lines.every(line => /^[-•]\s/.test(line.trim()) || line.trim() === "")
         if (isBulletList && lines.some(line => /^[-•]\s/.test(line.trim()))) {
           return (
             <ul key={bIdx} className="space-y-[6px] list-none">
               {lines.map((line, lIdx) => {
-                const match = line.trim().match(/^[-•]\s+(.+)$/)
-                if (match) {
+                const bulletMatch = line.trim().match(/^[-•]\s+(.+)$/)
+                if (bulletMatch) {
                   return (
                     <li key={lIdx} className="flex gap-[10px] items-start">
-                      <span className="text-[var(--color-text-tertiary)] text-[8px] mt-[7px] shrink-0">●</span>
-                      <span className="flex-1 text-[15px] leading-[1.65] text-[var(--color-text-primary)]">{formatInlineText(match[1])}</span>
+                      <span className="text-[var(--color-text-quaternary)] text-[5px] mt-[9px] shrink-0">●</span>
+                      <span className="flex-1 text-[15px] leading-[1.6] text-[var(--color-text-primary)]">{formatInlineText(bulletMatch[1])}</span>
                     </li>
                   )
                 }
@@ -787,24 +1172,28 @@ function FormattedResponse({ content }: { content: string }) {
           )
         }
 
-        // Check for numbered item with bold header spanning multiple paragraphs
+        // Numbered item with bold header spanning multiple paragraphs
         const numberedHeaderMatch = trimmed.match(/^(\d+)\.\s*\*\*(.+?)\*\*:?\s*(.*)$/s)
         if (numberedHeaderMatch) {
           const [, num, header, rest] = numberedHeaderMatch
           return (
             <div key={bIdx} className="flex gap-[8px]">
-              <span className="text-[15px] font-medium text-[var(--color-text-tertiary)] w-[18px] shrink-0 text-right">{num}.</span>
-              <div className="flex-1">
-                <span className="text-[15px] font-semibold text-[var(--color-text-primary)] leading-[1.5]">{header}</span>
-                {rest && <p className="text-[15px] leading-[1.65] text-[var(--color-text-secondary)] mt-[2px]">{formatInlineText(rest.trim())}</p>}
+              <span className="text-[15px] leading-[1.6] font-medium text-[var(--color-text-quaternary)] w-[18px] shrink-0 text-right tabular-nums">{num}.</span>
+              <div className="flex-1 min-w-0">
+                <span className="text-[15px] font-semibold text-[var(--color-text-primary)] leading-[1.6]">{header}</span>
+                {rest && (
+                  <span className="text-[15px] leading-[1.6] text-[var(--color-text-secondary)]">
+                    {" "}{formatInlineText(rest.trim())}
+                  </span>
+                )}
               </div>
             </div>
           )
         }
 
-        // Regular paragraph with inline formatting
+        // Regular paragraph
         return (
-          <p key={bIdx} className="text-[15px] leading-[1.7] text-[var(--color-text-primary)]">
+          <p key={bIdx} className="text-[15px] leading-[1.6] text-[var(--color-text-primary)] tracking-[-0.1px]">
             {formatInlineText(trimmed)}
           </p>
         )
@@ -812,6 +1201,10 @@ function FormattedResponse({ content }: { content: string }) {
     </div>
   )
 }
+
+// ============================================================================
+// Chat Message
+// ============================================================================
 
 interface ChatMessageProps {
   message: Message
@@ -823,12 +1216,11 @@ interface ChatMessageProps {
 function ChatMessage({ message, onCitationClick, onRetry, isStreaming }: ChatMessageProps) {
   const isUser = message.role === "user"
 
-  // User message - refined dark bubble, right aligned
-  // Reduced heaviness: smaller padding, tighter radius, max 78% width
+  // User message — right-aligned bubble
   if (isUser) {
     return (
-      <div className="flex justify-end pl-[40px]">
-        <div className="max-w-[78%] rounded-[20px] bg-[var(--color-text-primary)] px-[14px] py-[9px] shadow-[0_1px_2px_rgba(0,0,0,0.08)]">
+      <div className="flex justify-end pl-[52px] mb-[20px]">
+        <div className="max-w-[82%] rounded-[20px] bg-[var(--color-accent)] px-[16px] py-[10px]">
           <p className="text-[15px] leading-[1.5] text-white whitespace-pre-wrap">
             {message.content}
           </p>
@@ -840,26 +1232,24 @@ function ChatMessage({ message, onCitationClick, onRetry, isStreaming }: ChatMes
   // Error state
   if (message.error) {
     return (
-      <div className="flex justify-start pr-[40px]">
-        <div className="max-w-full">
-          <div className="rounded-[14px] bg-[var(--color-surface)] border border-[var(--color-destructive)]/20 px-[14px] py-[12px]">
-            <div className="flex items-start gap-[10px]">
-              <AlertCircle className="h-[16px] w-[16px] text-[var(--color-destructive)] shrink-0 mt-[1px]" />
-              <div className="flex-1">
-                <p className="text-[15px] leading-[1.5] text-[var(--color-text-primary)] mb-[12px]">
-                  {message.content}
-                </p>
-                {onRetry && (
-                  <button
-                    onClick={onRetry}
-                    aria-label="Retry sending message"
-                    className="inline-flex items-center gap-[6px] rounded-full bg-[var(--color-fill-tertiary)] px-[14px] py-[8px] text-[13px] font-medium text-[var(--color-text-primary)] transition-all active:scale-[0.97] active:bg-[var(--color-fill-secondary)] min-h-[44px]"
-                  >
-                    <RotateCcw className="h-[13px] w-[13px]" />
-                    <span>Retry</span>
-                  </button>
-                )}
-              </div>
+      <div className="mb-[20px] pr-[24px]">
+        <div className="rounded-[14px] border border-[var(--color-destructive)]/15 bg-[var(--color-destructive)]/[0.03] px-[14px] py-[12px]">
+          <div className="flex items-start gap-[10px]">
+            <AlertCircle className="h-[16px] w-[16px] text-[var(--color-destructive)] shrink-0 mt-[1px]" />
+            <div className="flex-1">
+              <p className="text-[15px] leading-[1.5] text-[var(--color-text-primary)] mb-[10px]">
+                {message.content}
+              </p>
+              {onRetry && (
+                <button
+                  onClick={onRetry}
+                  aria-label="Retry sending message"
+                  className="inline-flex items-center gap-[5px] rounded-full bg-[var(--color-fill-tertiary)] px-[12px] py-[6px] text-[13px] font-medium text-[var(--color-text-primary)] transition-all active:scale-[0.96] active:bg-[var(--color-fill-secondary)] min-h-[36px]"
+                >
+                  <RotateCcw className="h-[12px] w-[12px]" />
+                  <span>Retry</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -867,57 +1257,59 @@ function ChatMessage({ message, onCitationClick, onRetry, isStreaming }: ChatMes
     )
   }
 
-  // Assistant message - flush on background (ChatGPT-style Option A)
-  // Clean typography, no bubble, perfect spacing
-  return (
-    <div className="w-full pr-[24px]">
-      {/* Answer text with improved typography */}
-      <div className="text-[var(--color-text-primary)]">
-        <FormattedResponse content={message.content || (isStreaming ? "" : "...")} />
-        {isStreaming && (
-          <span className="inline-block w-[2px] h-[15px] bg-[var(--color-accent)] ml-[2px] align-middle animate-pulse rounded-full" />
-        )}
-      </div>
+  // Assistant message — flush left, no bubble (ChatGPT-style)
+  const isEmptyStreaming = isStreaming && !message.content
+  // Note: takeaways are intentionally not rendered — they are extracted from the
+  // answer's own numbered/bullet items and would duplicate the content already
+  // shown in the formatted response body. (Same treatment as followUps.)
+  const hasSources = !isStreaming && message.citations && message.citations.length > 0
 
-      {/* Key Takeaways - subtle bullet list */}
-      {!isStreaming && message.takeaways && message.takeaways.length > 0 && (
-        <div className="mt-[16px] pt-[12px] border-t border-[var(--color-separator)]">
-          <ul className="space-y-[6px]">
-            {message.takeaways.map((takeaway, idx) => (
-              <li key={idx} className="flex gap-[10px] items-start text-[14px] leading-[1.55] text-[var(--color-text-secondary)]">
-                <span className="text-[var(--color-accent)] text-[6px] mt-[6px] shrink-0">●</span>
-                <span>{takeaway}</span>
-              </li>
-            ))}
-          </ul>
+  return (
+    <div className="mb-[28px]">
+      {/* Thinking indicator — before first token */}
+      {isEmptyStreaming && (
+        <div className="flex items-center gap-[8px] py-[2px]">
+          <div className="flex gap-[3px]">
+            <span className="h-[5px] w-[5px] rounded-full bg-[var(--color-text-tertiary)] opacity-60 animate-bounce [animation-delay:-0.3s]" />
+            <span className="h-[5px] w-[5px] rounded-full bg-[var(--color-text-tertiary)] opacity-60 animate-bounce [animation-delay:-0.15s]" />
+            <span className="h-[5px] w-[5px] rounded-full bg-[var(--color-text-tertiary)] opacity-60 animate-bounce" />
+          </div>
+          <span className="text-[13px] text-[var(--color-text-quaternary)]">Searching articles...</span>
         </div>
       )}
 
-      {/* Sources Section - clean cards with clear hierarchy */}
-      {!isStreaming && message.citations && message.citations.length > 0 && (
-        <div className="mt-[18px]">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[var(--color-text-tertiary)] mb-[10px]">
+      {/* Answer body */}
+      {!isEmptyStreaming && (
+        <div className="pr-[4px]">
+          <FormattedResponse content={message.content || "..."} />
+          {isStreaming && (
+            <span className="inline-block w-[2px] h-[14px] bg-[var(--color-text-tertiary)] ml-[2px] align-middle animate-pulse rounded-full opacity-60" />
+          )}
+        </div>
+      )}
+
+      {/* Sources — only after streaming completes */}
+      {hasSources && (
+        <div className="mt-[18px] pt-[16px] border-t border-[var(--color-separator-light)]">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[var(--color-text-quaternary)] mb-[10px]">
             Sources
           </p>
-          <div className="space-y-[8px]">
-            {message.citations.map((citation) => (
+          <div className="space-y-[6px]">
+            {message.citations!.map((citation) => (
               <SourceCard key={citation.articleId} citation={citation} onClick={onCitationClick} />
             ))}
           </div>
         </div>
       )}
-
-
     </div>
   )
 }
 
-/**
- * Source Card - Compact tappable article card with clear hierarchy
- * Improved: Better density, cleaner visual weight, proper tap target
- */
+// ============================================================================
+// Source Card
+// ============================================================================
+
 function SourceCard({ citation, onClick }: { citation: RagCitation; onClick: (c: RagCitation) => void }) {
-  // Format date for display
   const formatDate = (dateStr: string) => {
     try {
       const date = new Date(dateStr)
@@ -943,41 +1335,33 @@ function SourceCard({ citation, onClick }: { citation: RagCitation; onClick: (c:
         onClick(citation)
       }}
       aria-label={`View article: ${citation.title}`}
-      className="group w-full text-left flex items-start gap-[12px] rounded-[12px] bg-[var(--color-surface)] border border-[var(--color-separator)] p-[12px] transition-all duration-150 active:scale-[0.98] active:bg-[var(--color-fill-quaternary)] min-h-[52px]"
+      className="group w-full text-left flex items-center gap-[10px] rounded-[12px] bg-[var(--color-fill-quaternary)] px-[14px] py-[11px] transition-all duration-150 active:scale-[0.98] active:bg-[var(--color-fill-tertiary)]"
     >
-      {/* Content */}
       <div className="flex-1 min-w-0">
-        {/* Article title - 15px semibold, line-clamp 2 */}
-        <p className="text-[14px] font-medium text-[var(--color-text-primary)] leading-[1.4] line-clamp-2 mb-[3px]">
+        <p className="text-[14px] font-medium text-[var(--color-text-primary)] leading-[1.35] line-clamp-2 tracking-[-0.1px]">
           {citation.title}
         </p>
-        {/* Source + date row */}
-        <div className="flex items-center gap-[6px]">
-          <span className="text-[12px] font-medium text-[var(--color-text-secondary)] truncate">{citation.sourceName}</span>
-          <span className="text-[10px] text-[var(--color-text-quaternary)]">·</span>
-          <span className="text-[12px] text-[var(--color-text-tertiary)]">{formatDate(citation.publishedAt)}</span>
+        <div className="flex items-center gap-[5px] mt-[3px]">
+          <span className="text-[12px] text-[var(--color-text-tertiary)] truncate">{citation.sourceName}</span>
+          <span className="text-[8px] text-[var(--color-text-quaternary)] opacity-50">●</span>
+          <span className="text-[12px] text-[var(--color-text-quaternary)]">{formatDate(citation.publishedAt)}</span>
         </div>
       </div>
-      {/* External link icon - aligned right, 44px tap target implied by row height */}
-      <div className="shrink-0 flex items-center justify-center w-[24px] h-[24px] rounded-full bg-[var(--color-fill-quaternary)] group-active:bg-[var(--color-fill-tertiary)] mt-[2px]">
-        <ExternalLink className="h-[12px] w-[12px] text-[var(--color-text-tertiary)]" strokeWidth={2} />
-      </div>
+      <ExternalLink className="h-[12px] w-[12px] text-[var(--color-text-quaternary)] shrink-0 opacity-40 group-active:opacity-80" strokeWidth={2} />
     </button>
   )
 }
 
-/**
- * Typing indicator - subtle bouncing dots
- */
+// ============================================================================
+// Typing Indicator
+// ============================================================================
+
 function TypingIndicator() {
   return (
-    <div className="flex justify-start pl-[2px]">
-      <div className="flex items-center gap-[5px] py-[8px]">
-        <span className="h-[7px] w-[7px] rounded-full bg-[var(--color-text-tertiary)]/60 animate-bounce [animation-delay:-0.3s]" />
-        <span className="h-[7px] w-[7px] rounded-full bg-[var(--color-text-tertiary)]/60 animate-bounce [animation-delay:-0.15s]" />
-        <span className="h-[7px] w-[7px] rounded-full bg-[var(--color-text-tertiary)]/60 animate-bounce" />
-      </div>
+    <div className="flex items-center gap-[4px] py-[8px] mb-[20px]">
+      <span className="h-[5px] w-[5px] rounded-full bg-[var(--color-text-tertiary)] opacity-50 animate-bounce [animation-delay:-0.3s]" />
+      <span className="h-[5px] w-[5px] rounded-full bg-[var(--color-text-tertiary)] opacity-50 animate-bounce [animation-delay:-0.15s]" />
+      <span className="h-[5px] w-[5px] rounded-full bg-[var(--color-text-tertiary)] opacity-50 animate-bounce" />
     </div>
   )
 }
-

@@ -57,7 +57,7 @@ export function CategoryChips({ value, onChange }: CategoryChipsProps) {
       role="tablist"
       aria-label="Filter by category"
     >
-      <div className="flex gap-[6px]">
+      <div className="flex gap-[7px]">
         {CATEGORIES.map((cat) => {
           const isActive = value === cat.value
           return (
@@ -68,15 +68,14 @@ export function CategoryChips({ value, onChange }: CategoryChipsProps) {
               onClick={() => handleChange(cat.value)}
               variant={isActive ? "filterActive" : "filter"}
               size="default"
-              className={cn(
-                "shrink-0",
-                isActive && "bg-[var(--color-text-primary)]"
-              )}
+              className="shrink-0"
             >
               {cat.label}
             </Chip>
           )
         })}
+        {/* End padding so last chip isn't clipped at scroll edge */}
+        <div className="shrink-0 w-[1px]" aria-hidden />
       </div>
     </div>
   )
@@ -144,7 +143,7 @@ export function SourceFilter({ sources, selectedIds, onChange }: SourceFilterPro
       <SheetTrigger asChild>
         <button
           className={cn(
-            "flex min-h-[44px] min-w-[44px] items-center gap-[4px] rounded-[var(--radius-md)] px-[10px] py-[8px] text-[13px] font-medium tracking-[-0.08px] transition-colors active:bg-[var(--color-fill-quaternary)]",
+            "flex min-h-[44px] min-w-[44px] items-center gap-[5px] rounded-[var(--radius-sm)] px-[8px] py-[6px] text-[13px] font-medium tracking-[-0.08px] transition-colors active:bg-[var(--color-fill-quaternary)]",
             selectedIds.length > 0
               ? "text-[var(--color-accent)]"
               : "text-[var(--color-text-secondary)]"
@@ -152,9 +151,9 @@ export function SourceFilter({ sources, selectedIds, onChange }: SourceFilterPro
           onClick={() => hapticLight()}
           aria-label={`Filter sources: ${label}`}
         >
-          <Newspaper className="h-[13px] w-[13px] shrink-0 opacity-60" strokeWidth={2} />
+          <Newspaper className="h-[13px] w-[13px] shrink-0 opacity-50" strokeWidth={1.8} />
           <span className="whitespace-nowrap">{label}</span>
-          <ChevronDown className="h-[10px] w-[10px] shrink-0 opacity-40" strokeWidth={2.5} />
+          <ChevronDown className="h-[9px] w-[9px] shrink-0 opacity-30" strokeWidth={2.5} />
         </button>
       </SheetTrigger>
       <SheetContent

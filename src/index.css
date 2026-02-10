@@ -381,7 +381,7 @@ select:focus-visible {
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: saturate(200%) blur(32px);
   -webkit-backdrop-filter: saturate(200%) blur(32px);
-  border-bottom: 0.5px solid rgba(0, 0, 0, 0.06);
+  /* Border controlled dynamically by TopNav component */
 }
 
 .glass-card {
@@ -694,10 +694,10 @@ select:focus-visible {
 
 /* Content visibility optimization - prevents layout popping
    Using auto allows browser to remember actual size after first render
-   280px = approximate height of card with image (2:1 aspect ~160px + content ~120px) */
+   ~300px = approximate height of card with 2:1 image aspect + content area */
 .content-visibility-auto {
   content-visibility: auto;
-  contain-intrinsic-block-size: auto 280px;
+  contain-intrinsic-block-size: auto 300px;
 }
 
 /* Improved text rendering for headlines */

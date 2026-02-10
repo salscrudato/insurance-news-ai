@@ -477,6 +477,7 @@ export const getOrCreateArticleAI = onCall<GetOrCreateArticleAIData>(
 
     const response = await openai.responses.create({
       model: AI_MODEL,
+      max_output_tokens: 800,
       input: [
         { role: "system", content: ARTICLE_SUMMARIZE_SYSTEM },
         { role: "user", content: prompt },
@@ -638,6 +639,7 @@ export const generateDailyBrief = onSchedule(
 
     const response = await openai.responses.create({
       model: AI_MODEL_PREMIUM,
+      max_output_tokens: 4000,
       input: [
         { role: "system", content: DAILY_BRIEF_SYSTEM },
         { role: "user", content: prompt },
@@ -722,6 +724,13 @@ export const generateDailyBrief = onSchedule(
 export const triggerDailyBrief = onRequest(
   { secrets: [openaiApiKey] },
   async (req, res) => {
+    // Protect against unauthorized access (gpt-4o is expensive)
+    const apiKey = req.query.key;
+    if (apiKey !== process.env.INGESTION_API_KEY && !process.env.FUNCTIONS_EMULATOR) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
     const dateKey = (req.query.date as string) || getTodayDateET();
     console.log(`[triggerDailyBrief] Manual trigger for ${dateKey}`);
 
@@ -801,6 +810,7 @@ export const triggerDailyBrief = onRequest(
 
     const response = await openai.responses.create({
       model: AI_MODEL_PREMIUM,
+      max_output_tokens: 4000,
       input: [
         { role: "system", content: DAILY_BRIEF_SYSTEM },
         { role: "user", content: prompt },
@@ -995,6 +1005,9 @@ export const getArticles = onCall<GetArticlesData>(async (request) => {
   // Pagination
   if (startAfterPublishedAt) {
     const startAfterDate = new Date(startAfterPublishedAt);
+    if (isNaN(startAfterDate.getTime())) {
+      throw new HttpsError("invalid-argument", "startAfterPublishedAt must be a valid ISO date string.");
+    }
     query = query.startAfter(Timestamp.fromDate(startAfterDate));
   }
 
@@ -1288,10 +1301,25 @@ export const answerQuestionRag = onCall<AnswerQuestionRagData>(
       );
     }
 
+    if (question.length > 2000) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Question is too long. Maximum 2000 characters."
+      );
+    }
+
     if (!["today", "7d", "30d"].includes(scope)) {
       throw new HttpsError(
         "invalid-argument",
         "scope must be 'today', '7d', or '30d'."
+      );
+    }
+
+    // Validate sourceIds
+    if (sourceIds && (!Array.isArray(sourceIds) || sourceIds.length > 10)) {
+      throw new HttpsError(
+        "invalid-argument",
+        "sourceIds must be an array of at most 10 source IDs."
       );
     }
 
@@ -1437,8 +1465,18 @@ export const answerQuestionRagStream = onRequest(
       return;
     }
 
+    if (question.length > 2000) {
+      res.status(400).json({ error: "Question is too long. Maximum 2000 characters." });
+      return;
+    }
+
     if (!["today", "7d", "30d"].includes(scope)) {
       res.status(400).json({ error: "scope must be 'today', '7d', or '30d'" });
+      return;
+    }
+
+    if (sourceIds && (!Array.isArray(sourceIds) || sourceIds.length > 10)) {
+      res.status(400).json({ error: "sourceIds must be an array of at most 10 source IDs." });
       return;
     }
 

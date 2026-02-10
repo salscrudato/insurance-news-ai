@@ -89,12 +89,13 @@ function OTPInput({
     }
   }
 
-  // Auto-focus first empty box when value changes externally (e.g. reset)
+  // Auto-focus first empty box when value is cleared externally (e.g. reset)
+  const isEmpty = value === ""
   useEffect(() => {
-    if (value === "") {
+    if (isEmpty) {
       focusIndex(0)
     }
-  }, [value === ""])
+  }, [isEmpty])
 
   return (
     <div className="flex items-center justify-center gap-[8px]">

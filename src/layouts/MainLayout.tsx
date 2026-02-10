@@ -8,49 +8,31 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
-import { useState, createContext, useContext } from "react"
-import { hapticMedium } from "@/lib/haptics"
+import { useState } from "react"
+import { hapticMedium, hapticLight } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
 import { TopNav, MenuButton } from "@/components/layout"
 import { useLargeTitle } from "@/lib/hooks"
-
-// Context to share large title state with child pages
-interface LargeTitleContextValue {
-  titleRef: React.RefObject<HTMLDivElement | null>
-  isVisible: boolean
-}
-
-const LargeTitleContext = createContext<LargeTitleContextValue | null>(null)
-
-export function useLargeTitleContext() {
-  const context = useContext(LargeTitleContext)
-  if (!context) {
-    throw new Error("useLargeTitleContext must be used within MainLayout")
-  }
-  return context
-}
+import { LargeTitleContext } from "./large-title-context"
 
 interface NavItem {
   path: string
   label: string
   icon: LucideIcon
-  iconBg: string
   description?: string
+  /** Whether this is a secondary/utility item (uses neutral styling) */
+  secondary?: boolean
 }
 
-// Clean, unified blue accent - Apple-inspired monochrome navigation
-const ACCENT_BLUE = "#0A84FF"
-const NEUTRAL_GRAY = "#8E8E93"
-
 const primaryNavItems: NavItem[] = [
-  { path: "/", label: "Today", icon: Newspaper, iconBg: ACCENT_BLUE, description: "Daily brief" },
-  { path: "/feed", label: "Feed", icon: LayoutList, iconBg: ACCENT_BLUE, description: "All articles" },
-  { path: "/ask", label: "Ask AI", icon: Sparkles, iconBg: ACCENT_BLUE, description: "Chat with sources" },
-  { path: "/bookmarks", label: "Bookmarks", icon: Bookmark, iconBg: ACCENT_BLUE, description: "Saved articles" },
+  { path: "/", label: "Today", icon: Newspaper, description: "Daily brief" },
+  { path: "/feed", label: "Feed", icon: LayoutList, description: "All articles" },
+  { path: "/ask", label: "Ask AI", icon: Sparkles, description: "Chat with sources" },
+  { path: "/bookmarks", label: "Bookmarks", icon: Bookmark, description: "Saved articles" },
 ]
 
 const secondaryNavItems: NavItem[] = [
-  { path: "/settings", label: "Settings", icon: Settings, iconBg: NEUTRAL_GRAY, description: "Preferences" },
+  { path: "/settings", label: "Settings", icon: Settings, description: "Preferences", secondary: true },
 ]
 
 const allNavItems = [...primaryNavItems, ...secondaryNavItems]
@@ -73,6 +55,102 @@ export function MainLayout() {
 
   const pageTitle = getPageTitle(location.pathname)
 
+  /**
+   * NavRow - Shared navigation row for side nav
+   * Apple-style: restrained active state, subtle icon containers, inset separators
+   */
+  const NavRow = ({
+    item,
+    isLast = false,
+  }: {
+    item: NavItem
+    isLast?: boolean
+  }) => {
+    const isActive = location.pathname === item.path
+    const Icon = item.icon
+
+    return (
+      <button
+        key={item.path}
+        onClick={() => {
+          if (isActive) { hapticLight() } else { hapticMedium() }
+          handleNavigation(item.path)
+        }}
+        className={cn(
+          "group relative flex w-full items-center gap-[12px] px-[14px] text-left",
+          "transition-colors duration-[var(--duration-fast)] ease-[var(--ease-ios)]",
+          "-webkit-tap-highlight-color-transparent",
+          // Row height: 52px for comfortable tap targets with two-line content
+          "min-h-[52px] py-[10px]",
+          isActive
+            ? "bg-[var(--color-fill-quaternary)]"
+            : "bg-transparent hover:bg-[var(--color-fill-quaternary)] active:bg-[var(--color-fill-tertiary)]",
+        )}
+      >
+        {/* Icon container - subtle rounded square */}
+        <div
+          className={cn(
+            "flex h-[30px] w-[30px] items-center justify-center rounded-[7px] shrink-0",
+            "transition-transform duration-[var(--duration-fast)] ease-[var(--ease-ios)]",
+            "group-active:scale-[0.92]",
+            item.secondary
+              ? (isActive ? "bg-[var(--color-fill-secondary)]" : "bg-[var(--color-fill-tertiary)]")
+              : (isActive ? "bg-[var(--color-accent)]" : "bg-[var(--color-accent-soft)]"),
+          )}
+        >
+          <Icon
+            className="h-[16px] w-[16px]"
+            style={{
+              color: item.secondary
+                ? 'var(--color-text-secondary)'
+                : isActive ? 'white' : 'var(--color-accent)',
+            }}
+            strokeWidth={1.8}
+          />
+        </div>
+
+        {/* Text content */}
+        <div className="flex-1 min-w-0">
+          <span
+            className={cn(
+              "block text-[15px] font-medium tracking-[-0.24px]",
+              isActive ? "text-[var(--color-text-primary)] font-semibold" : "text-[var(--color-text-primary)]"
+            )}
+          >
+            {item.label}
+          </span>
+          {item.description && (
+            <span className="block text-[12px] tracking-[-0.02em] text-[var(--color-text-tertiary)] mt-[1px]">
+              {item.description}
+            </span>
+          )}
+        </div>
+
+        {/* Chevron - only for non-active items */}
+        <ChevronRight
+          className={cn(
+            "h-[13px] w-[13px] shrink-0",
+            "transition-[transform,opacity] duration-[var(--duration-fast)] ease-[var(--ease-ios)]",
+            isActive ? "text-[var(--color-text-quaternary)] opacity-0" : "text-[var(--color-text-quaternary)] opacity-60",
+            "group-hover:translate-x-[1px]"
+          )}
+          strokeWidth={2.5}
+        />
+
+        {/* Inset separator - only between non-active rows */}
+        {!isLast && (
+          <div
+            className={cn(
+              "absolute bottom-0 right-[14px] h-[0.5px] bg-[var(--color-separator)]",
+              // Inset from left: icon width (30) + gap (12) + padding (14) = 56px
+              "left-[56px]"
+            )}
+          />
+        )}
+      </button>
+    )
+  }
+
   // Menu trigger element for TopNav (contains full Sheet with trigger + content)
   const menuTrigger = (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -81,179 +159,91 @@ export function MainLayout() {
       </SheetTrigger>
       <SheetContent
         side="right"
-        className="w-[320px] border-l-0 bg-[var(--color-surface)] p-0 shadow-[-8px_0_32px_rgba(0,0,0,0.08)]"
+        hideCloseButton
+        className="w-[300px] border-l-0 bg-[var(--color-surface)] p-0 shadow-[-4px_0_24px_rgba(0,0,0,0.06)]"
       >
         <SheetHeader className="sr-only">
           <SheetTitle>Navigation Menu</SheetTitle>
         </SheetHeader>
 
         <div className="flex h-full flex-col">
-          {/* Header with brand */}
-          <div className="px-[24px] pb-[32px]" style={{ paddingTop: 'calc(24px + var(--safe-area-inset-top))' }}>
-            <div className="flex items-center gap-[16px]">
-              <div className="flex h-[48px] w-[48px] items-center justify-center shrink-0">
-                <AppLogo size={48} glow className="drop-shadow-[0_4px_12px_rgba(10,132,255,0.25)]" />
+          {/* Brand header */}
+          <div
+            className="px-[20px] pb-[20px]"
+            style={{ paddingTop: 'calc(20px + var(--safe-area-inset-top))' }}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-[12px]">
+                <div className="flex h-[40px] w-[40px] items-center justify-center shrink-0">
+                  <AppLogo size={40} />
+                </div>
+                <div>
+                  <span className="block text-[18px] font-bold tracking-[-0.4px] text-[var(--color-text-primary)] leading-[1.2]">
+                    The Brief
+                  </span>
+                  <span className="block text-[12px] tracking-[-0.02em] text-[var(--color-text-tertiary)] mt-[1px]">
+                    P&C Insurance News
+                  </span>
+                </div>
               </div>
-              <div>
-                <span className="block text-[20px] font-bold tracking-[-0.5px] text-[var(--color-text-primary)]">
-                  The Brief
-                </span>
-                <span className="block text-[12px] tracking-[-0.02em] text-[var(--color-text-tertiary)]">
-                  P&C Insurance News
-                </span>
-              </div>
+              {/* Close button - aligned with brand row */}
+              <button
+                onClick={() => setOpen(false)}
+                className={cn(
+                  "flex h-[28px] w-[28px] items-center justify-center rounded-full shrink-0",
+                  "bg-[var(--color-fill-tertiary)]",
+                  "text-[var(--color-text-tertiary)]",
+                  "transition-all duration-[var(--duration-fast)] ease-[var(--ease-ios)]",
+                  "hover:bg-[var(--color-fill-secondary)] hover:text-[var(--color-text-secondary)]",
+                  "active:scale-[0.90] active:bg-[var(--color-fill-primary)]",
+                  "-webkit-tap-highlight-color-transparent",
+                )}
+                aria-label="Close menu"
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                  <line x1="1" y1="1" x2="9" y2="9" />
+                  <line x1="9" y1="1" x2="1" y2="9" />
+                </svg>
+              </button>
             </div>
           </div>
 
+          {/* Separator between brand and nav */}
+          <div className="mx-[20px] h-[0.5px] bg-[var(--color-separator)] mb-[12px]" />
+
           {/* Navigation */}
-          <nav className="flex-1 px-[16px]">
-            {/* Primary Navigation Card */}
-            <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-grouped)] shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-              {primaryNavItems.map((item, index) => {
-                const isActive = location.pathname === item.path
-                const Icon = item.icon
-                const isLast = index === primaryNavItems.length - 1
-                return (
-                  <button
-                    key={item.path}
-                    onClick={() => {
-                      hapticMedium()
-                      handleNavigation(item.path)
-                    }}
-                    className={cn(
-                      "group flex w-full items-center gap-[14px] px-[16px] py-[14px] text-left transition-all duration-200",
-                      isActive
-                        ? "bg-[var(--color-accent)]"
-                        : "bg-[var(--color-surface)] hover:bg-[var(--color-fill-quaternary)] active:bg-[var(--color-fill-tertiary)]",
-                      !isLast && !isActive && "border-b border-[var(--color-separator)]"
-                    )}
-                  >
-                    {/* Icon container */}
-                    <div
-                      className={cn(
-                        "flex h-[32px] w-[32px] items-center justify-center rounded-[8px] shrink-0 transition-transform duration-200 group-active:scale-[0.92]",
-                        isActive
-                          ? "bg-white/20"
-                          : "bg-[var(--color-accent-soft)]"
-                      )}
-                    >
-                      <Icon
-                        className="h-[17px] w-[17px]"
-                        style={{ color: isActive ? 'white' : 'var(--color-accent)' }}
-                        strokeWidth={1.8}
-                      />
-                    </div>
-
-                    {/* Text content */}
-                    <div className="flex-1 min-w-0">
-                      <span
-                        className={cn(
-                          "block text-[16px] font-semibold tracking-[-0.3px]",
-                          isActive ? "text-white" : "text-[var(--color-text-primary)]"
-                        )}
-                      >
-                        {item.label}
-                      </span>
-                      {item.description && (
-                        <span
-                          className={cn(
-                            "block text-[13px] tracking-[-0.08px] mt-[1px]",
-                            isActive ? "text-white/65" : "text-[var(--color-text-tertiary)]"
-                          )}
-                        >
-                          {item.description}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Chevron */}
-                    <ChevronRight
-                      className={cn(
-                        "h-[14px] w-[14px] shrink-0 transition-transform duration-200 group-hover:translate-x-[2px]",
-                        isActive ? "text-white/40" : "text-[var(--color-text-quaternary)]"
-                      )}
-                      strokeWidth={2.5}
-                    />
-                  </button>
-                )
-              })}
+          <nav className="flex-1 px-[8px]">
+            {/* Primary Navigation */}
+            <div className="overflow-hidden rounded-[12px]">
+              {primaryNavItems.map((item, index) => (
+                <NavRow
+                  key={item.path}
+                  item={item}
+                  isLast={index === primaryNavItems.length - 1}
+                />
+              ))}
             </div>
 
-            {/* Secondary Navigation Card */}
-            <div className="mt-[20px] overflow-hidden rounded-[16px] bg-[var(--color-bg-grouped)] shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-              {secondaryNavItems.map((item) => {
-                const isActive = location.pathname === item.path
-                const Icon = item.icon
-                return (
-                  <button
-                    key={item.path}
-                    onClick={() => {
-                      hapticMedium()
-                      handleNavigation(item.path)
-                    }}
-                    className={cn(
-                      "group flex w-full items-center gap-[14px] px-[16px] py-[14px] text-left transition-all duration-200",
-                      isActive
-                        ? "bg-[var(--color-accent)]"
-                        : "bg-[var(--color-surface)] hover:bg-[var(--color-fill-quaternary)] active:bg-[var(--color-fill-tertiary)]"
-                    )}
-                  >
-                    {/* Icon container */}
-                    <div
-                      className={cn(
-                        "flex h-[32px] w-[32px] items-center justify-center rounded-[8px] shrink-0 transition-transform duration-200 group-active:scale-[0.92]",
-                        isActive
-                          ? "bg-white/20"
-                          : "bg-[var(--color-fill-tertiary)]"
-                      )}
-                    >
-                      <Icon
-                        className={cn(
-                          "h-[17px] w-[17px]",
-                          isActive ? "text-white" : "text-[var(--color-text-secondary)]"
-                        )}
-                        strokeWidth={1.8}
-                      />
-                    </div>
+            {/* Visual break between groups */}
+            <div className="my-[8px] mx-[14px] h-[0.5px] bg-[var(--color-separator)]" />
 
-                    {/* Text content */}
-                    <div className="flex-1 min-w-0">
-                      <span
-                        className={cn(
-                          "block text-[16px] font-semibold tracking-[-0.3px]",
-                          isActive ? "text-white" : "text-[var(--color-text-primary)]"
-                        )}
-                      >
-                        {item.label}
-                      </span>
-                      {item.description && (
-                        <span
-                          className={cn(
-                            "block text-[13px] tracking-[-0.08px] mt-[1px]",
-                            isActive ? "text-white/65" : "text-[var(--color-text-tertiary)]"
-                          )}
-                        >
-                          {item.description}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Chevron */}
-                    <ChevronRight
-                      className={cn(
-                        "h-[14px] w-[14px] shrink-0 transition-transform duration-200 group-hover:translate-x-[2px]",
-                        isActive ? "text-white/40" : "text-[var(--color-text-quaternary)]"
-                      )}
-                      strokeWidth={2.5}
-                    />
-                  </button>
-                )
-              })}
+            {/* Secondary Navigation */}
+            <div className="overflow-hidden rounded-[12px]">
+              {secondaryNavItems.map((item, index) => (
+                <NavRow
+                  key={item.path}
+                  item={item}
+                  isLast={index === secondaryNavItems.length - 1}
+                />
+              ))}
             </div>
           </nav>
 
           {/* Footer */}
-          <div className="px-[24px] pb-[calc(28px+var(--safe-area-inset-bottom))] pt-[24px] text-center">
+          <div
+            className="px-[20px] pt-[16px] text-center"
+            style={{ paddingBottom: 'calc(24px + var(--safe-area-inset-bottom))' }}
+          >
             <p className="text-[11px] font-medium tracking-[0.02em] text-[var(--color-text-quaternary)]">
               Made in Hackensack
             </p>

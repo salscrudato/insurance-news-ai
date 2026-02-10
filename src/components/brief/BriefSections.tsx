@@ -25,14 +25,12 @@ import type { BriefSection } from "@/types/firestore"
 
 /**
  * Strip citation brackets from bullet text
- * The AI includes article IDs like [f7fd4c2019240531] which we don't want to display
  */
 function stripCitations(text: string): string {
   return text.replace(/\s*\[[a-f0-9]{10,}\]/gi, "").trim()
 }
 
-// Section display configuration with neutral, muted colors
-// All use same neutral gray tones for professional, non-distracting appearance
+// Section display configuration
 const SECTION_CONFIG: Record<string, { label: string; icon: LucideIcon }> = {
   propertyCat: { label: "Property & Cat", icon: Building2 },
   casualtyLiability: { label: "Casualty & Liability", icon: Scale },
@@ -43,7 +41,6 @@ const SECTION_CONFIG: Record<string, { label: string; icon: LucideIcon }> = {
   market: { label: "Market & M&A", icon: TrendingUp },
 }
 
-// Max bullets to show before "show more"
 const MAX_VISIBLE_BULLETS = 3
 
 interface SectionBlockProps {
@@ -56,9 +53,7 @@ function SectionBlock({ sectionKey, section, isLast }: SectionBlockProps) {
   const [expanded, setExpanded] = useState(false)
   const config = SECTION_CONFIG[sectionKey]
 
-  if (!config || section.bullets.length === 0) {
-    return null
-  }
+  if (!config || section.bullets.length === 0) return null
 
   const Icon = config.icon
   const hasMore = section.bullets.length > MAX_VISIBLE_BULLETS
@@ -67,29 +62,28 @@ function SectionBlock({ sectionKey, section, isLast }: SectionBlockProps) {
 
   return (
     <div>
-      {/* Section Header - subtle neutral styling */}
-      <div className="flex items-center gap-[8px] px-[14px] py-[10px]">
+      {/* Section header */}
+      <div className="flex items-center gap-[8px] px-[16px] py-[10px]">
         <div className="flex h-[24px] w-[24px] items-center justify-center rounded-[6px] bg-[var(--color-fill-tertiary)]">
           <Icon
             className="h-[13px] w-[13px] text-[var(--color-text-tertiary)]"
             strokeWidth={1.75}
           />
         </div>
-        <h3 className="text-[14px] font-semibold tracking-[-0.2px] text-[var(--color-text-primary)]">
+        <h3 className="flex-1 text-[15px] font-semibold tracking-[-0.2px] text-[var(--color-text-primary)]">
           {config.label}
         </h3>
-        {/* Insight count badge */}
-        <span className="ml-auto text-[11px] font-medium text-[var(--color-text-quaternary)]">
+        <span className="text-[12px] font-normal tabular-nums text-[var(--color-text-quaternary)]">
           {section.bullets.length}
         </span>
       </div>
 
-      {/* Bullets - limit to 2-4 for density */}
-      <ul className="space-y-[8px] px-[14px] pb-[12px]">
+      {/* Bullets */}
+      <ul className="space-y-[8px] px-[16px] pb-[12px]">
         {visibleBullets.map((bullet, index) => (
           <li
             key={index}
-            className="flex gap-[8px] text-[14px] leading-[1.45] tracking-[-0.1px] text-[var(--color-text-secondary)]"
+            className="flex gap-[8px] text-[14px] leading-[1.47] tracking-[-0.15px] text-[var(--color-text-secondary)]"
             style={{ maxWidth: "520px" }}
           >
             <span className="mt-[8px] h-[4px] w-[4px] shrink-0 rounded-full bg-[var(--color-text-quaternary)]" />
@@ -98,22 +92,24 @@ function SectionBlock({ sectionKey, section, isLast }: SectionBlockProps) {
         ))}
       </ul>
 
-      {/* Expand/collapse for sections with more than MAX bullets */}
+      {/* Expand / collapse */}
       {hasMore && (
         <button
           onClick={() => setExpanded(!expanded)}
-          className="flex w-full items-center justify-center gap-[4px] pb-[10px] text-[12px] font-medium text-[var(--color-text-tertiary)] transition-colors active:text-[var(--color-text-secondary)]"
+          aria-expanded={expanded}
+          aria-label={expanded ? `Show fewer ${config.label} items` : `Show ${hiddenCount} more ${config.label} items`}
+          className="flex w-full min-h-[44px] items-center justify-center gap-[4px] pb-[10px] text-[13px] font-medium text-[var(--color-text-tertiary)] transition-colors duration-[var(--duration-fast)] active:text-[var(--color-text-secondary)]"
         >
           <span>{expanded ? "Show less" : `${hiddenCount} more`}</span>
           <ChevronDown
-            className={`h-[12px] w-[12px] transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+            className={`h-[12px] w-[12px] transition-transform duration-[var(--duration-fast)] ease-[var(--ease-ios)] ${expanded ? "rotate-180" : ""}`}
             strokeWidth={2}
           />
         </button>
       )}
 
-      {/* Section separator */}
-      {!isLast && <Separator className="mx-[14px]" />}
+      {/* Separator */}
+      {!isLast && <Separator className="mx-[16px]" />}
     </div>
   )
 }
@@ -131,14 +127,11 @@ interface BriefSectionsProps {
 }
 
 export function BriefSections({ sections }: BriefSectionsProps) {
-  // Filter to only show sections with content
   const sectionEntries = Object.entries(sections).filter(
     ([, section]) => section.bullets.length > 0
   )
 
-  if (sectionEntries.length === 0) {
-    return null
-  }
+  if (sectionEntries.length === 0) return null
 
   return (
     <Card>
@@ -153,4 +146,3 @@ export function BriefSections({ sections }: BriefSectionsProps) {
     </Card>
   )
 }
-

@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 /**
  * Badge - Compact label for status and categories
  * Following Apple HIG 2026 with refined styling

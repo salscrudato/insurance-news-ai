@@ -63,20 +63,22 @@ export function TopNav({
     <header
       className={cn(
         "sticky top-0 z-40",
-        "transition-all duration-[var(--duration-normal)] ease-[var(--ease-ios)]",
+        "transition-[border-color,box-shadow] duration-[var(--duration-normal)] ease-[var(--ease-ios)]",
         variant === "default" && "glass-nav",
         variant === "transparent" && "bg-transparent",
-        // Hairline divider appears on scroll
-        showDivider && [
-          "shadow-[inset_0_-0.5px_0_0_var(--color-separator-opaque)]",
-        ]
+        // Override the glass-nav border with a dynamic hairline:
+        // transparent when large title visible, opaque separator when scrolled
+        variant === "default" && (showDivider
+          ? "border-b-[0.5px] border-[var(--color-separator-opaque)]"
+          : "border-b-[0.5px] border-transparent"
+        )
       )}
     >
       <div
         className="safe-area-padding-x"
         style={{ paddingTop: 'var(--safe-area-inset-top)' }}
       >
-        <div className="flex h-[52px] items-center justify-between px-[var(--spacing-4)]">
+        <div className="flex h-[44px] items-center justify-between px-[16px]">
           {/* Left side: Brand or Back button */}
           <div className="flex items-center min-w-0 flex-1">
             {isSubScreen ? (
@@ -89,31 +91,27 @@ export function TopNav({
                   "-webkit-tap-highlight-color-transparent",
                   "transition-all duration-[var(--duration-fast)] ease-[var(--ease-ios)]",
                   "hover:bg-[var(--color-fill-tertiary)]",
-                  "active:bg-[var(--color-fill-secondary)] active:scale-[0.90]",
+                  "active:bg-[var(--color-fill-secondary)] active:scale-[0.92]",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
                 )}
                 onClick={handleBack}
               >
-                <ChevronLeft className="h-[24px] w-[24px]" strokeWidth={2.5} />
+                <ChevronLeft className="h-[22px] w-[22px]" strokeWidth={2.5} />
                 <span className="sr-only">Go back</span>
               </Button>
             ) : (
-              <div className="flex items-center gap-[12px]">
+              <div className="flex items-center gap-[10px]">
                 {/* Logo - fixed size container to prevent jitter */}
-                <div className="flex h-[30px] w-[30px] items-center justify-center shrink-0">
-                  <AppLogo
-                    size={30}
-                    glow
-                    className="drop-shadow-[0_1px_3px_rgba(10,132,255,0.20)]"
-                  />
+                <div className="flex h-[28px] w-[28px] items-center justify-center shrink-0">
+                  <AppLogo size={28} />
                 </div>
-                {/* Collapsed title - fades in when large title scrolls out */}
+                {/* Collapsed title - crossfades when large title scrolls out */}
                 <span
                   className={cn(
                     "text-[17px] font-semibold tracking-[-0.41px] text-[var(--color-text-primary)] whitespace-nowrap",
-                    "transition-all duration-[var(--duration-normal)] ease-[var(--ease-ios)]",
+                    "transition-[opacity,transform] duration-[280ms] ease-[var(--ease-ios)]",
                     isLargeTitleVisible
-                      ? "opacity-0 translate-y-[2px]"
+                      ? "opacity-0 translate-y-[3px] pointer-events-none"
                       : "opacity-100 translate-y-0"
                   )}
                 >
@@ -124,7 +122,7 @@ export function TopNav({
           </div>
 
           {/* Right side: Optional action + Menu button */}
-          <div className="flex items-center gap-[6px] shrink-0">
+          <div className="flex items-center gap-[4px] shrink-0">
             {rightAction}
             {menuTrigger}
           </div>
@@ -153,12 +151,12 @@ export const MenuButton = React.forwardRef<HTMLButtonElement, MenuButtonProps>(
         size="icon"
         className={cn(
           [
-            "-mr-2 h-[44px] w-[44px] rounded-full",
-            "text-[var(--color-text-secondary)]",
+            "-mr-1 h-[44px] w-[44px] rounded-full",
+            "text-[var(--color-text-tertiary)]",
             "-webkit-tap-highlight-color-transparent",
             "transition-all duration-[var(--duration-fast)] ease-[var(--ease-ios)]",
-            "hover:bg-[var(--color-fill-tertiary)] hover:text-[var(--color-text-primary)]",
-            "active:bg-[var(--color-fill-secondary)] active:scale-[0.90]",
+            "hover:bg-[var(--color-fill-quaternary)] hover:text-[var(--color-text-secondary)]",
+            "active:bg-[var(--color-fill-tertiary)] active:scale-[0.92]",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]",
           ].join(" "),
           className
@@ -168,7 +166,7 @@ export const MenuButton = React.forwardRef<HTMLButtonElement, MenuButtonProps>(
           onClick?.(e)
         }}
       >
-        <Menu className="h-[22px] w-[22px]" strokeWidth={2} />
+        <Menu className="h-[20px] w-[20px]" strokeWidth={1.8} />
         <span className="sr-only">Open menu</span>
       </Button>
     )

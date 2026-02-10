@@ -5,6 +5,7 @@
  * Stroke-based design with a subtle Apple-inspired blue gradient.
  */
 
+import { useId } from "react"
 import { cn } from "@/lib/utils"
 
 interface AppLogoProps {
@@ -35,7 +36,7 @@ export function AppLogo({
   const pixelSize = typeof size === "number" ? size : SIZE_MAP[size]
   
   // Generate unique gradient ID to avoid conflicts when multiple logos render
-  const gradientId = `logo-gradient-${Math.random().toString(36).slice(2, 9)}`
+  const gradientId = useId()
   
   // Scale stroke width relative to render size for crisp rendering at all sizes
   const strokeWidth = pixelSize <= 24 ? 56 : pixelSize <= 40 ? 52 : 48
@@ -103,7 +104,7 @@ export function AppLogoMark({
   size?: number
   className?: string 
 }) {
-  const gradientId = `logo-mark-${Math.random().toString(36).slice(2, 9)}`
+  const gradientId = useId()
   
   return (
     <svg

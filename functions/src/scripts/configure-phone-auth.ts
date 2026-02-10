@@ -25,12 +25,8 @@ const TEST_PHONE_NUMBERS: Record<string, string> = {
   "+15555550102": "123456",
 }
 
-// Authorized domains for production
-const AUTHORIZED_DOMAINS = [
-  "insurance-news-ai.firebaseapp.com",
-  "insurance-news-ai.web.app",
-  "localhost",
-]
+// Authorized domains for production (reference only - used when configuring Identity Platform):
+// "insurance-news-ai.firebaseapp.com", "insurance-news-ai.web.app", "localhost"
 
 async function getAccessToken(): Promise<string> {
   const googleAuth = new GoogleAuth({
@@ -100,11 +96,6 @@ async function main() {
     console.log("   Current config:", JSON.stringify(currentConfig, null, 2))
     
     // Prepare updated config with test phone numbers
-    const testPhoneNumbers = Object.entries(TEST_PHONE_NUMBERS).map(([phoneNumber, code]) => ({
-      phoneNumber,
-      code,
-    }))
-    
     const updatedConfig = {
       signIn: {
         ...currentConfig.signIn,

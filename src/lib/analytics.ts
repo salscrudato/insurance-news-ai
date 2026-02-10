@@ -11,7 +11,9 @@ export type AskAnalyticsEvent =
   | "ask_answered"
   | "ask_no_coverage"
   | "citation_opened"
-  | "follow_up_clicked"
+  | "chat_new"
+  | "chat_history_opened"
+  | "chat_deleted"
 
 // Event parameters
 export interface AskEventParams {

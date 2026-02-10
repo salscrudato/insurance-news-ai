@@ -5,10 +5,11 @@
  * - Clean header: source, timestamp, title
  * - Hero image (when available)
  * - AI Analysis card: TL;DR, Why it matters for P&C, Key implications
+ * - Auto-generates AI analysis when sheet opens (low-cost, cached)
  * - Actions: Read Article (Capacitor Browser on iOS), Bookmark
  */
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet"
 import {
   SHEET_TOKENS,
@@ -19,7 +20,7 @@ import {
   SheetAICard,
   SheetAICardSkeleton,
 } from "@/components/ui/sheet-primitives"
-import { Bookmark, Sparkles } from "lucide-react"
+import { Bookmark, Sparkles, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 import { useIsBookmarked, useToggleBookmark, useArticleAI } from "@/lib/hooks"
 import { useAuth } from "@/lib/auth-context"
@@ -28,6 +29,7 @@ import type { ArticleFromApi } from "@/lib/hooks"
 import type { Timestamp } from "firebase/firestore"
 import { hapticMedium, hapticLight } from "@/lib/haptics"
 import { openUrl } from "@/lib/browser"
+import { cn } from "@/lib/utils"
 
 // Accept either Firestore Article (from direct queries) or API Article (from Cloud Functions)
 type ArticleType = Article | ArticleFromApi
@@ -67,17 +69,60 @@ export function ArticleDetailSheet({
   const toggleBookmark = useToggleBookmark()
   const generateAI = useArticleAI()
 
-  // Local state for AI content (combines cached article.ai with generated)
-  const [aiContent, setAiContent] = useState<ArticleAI | null>(null)
+  // Generated AI content (from API call), keyed by article ID
+  const [generatedAI, setGeneratedAI] = useState<{ id: string; ai: ArticleAI } | null>(null)
+  // Error state tracked via ref to avoid setState-in-effect lint warnings
+  const [aiError, setAiError] = useState(false)
 
-  // Reset AI content when article changes
+  // Track which article we've already auto-triggered for (prevent re-firing)
+  const autoTriggeredRef = useRef<string | null>(null)
+
+  // Derive AI content: prefer article's cached AI, fall back to freshly generated
+  const aiContent = useMemo<ArticleAI | null>(() => {
+    if (article?.ai) return article.ai
+    if (generatedAI && article && generatedAI.id === article.id) return generatedAI.ai
+    return null
+  }, [article?.id, article?.ai, generatedAI]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-trigger AI generation when sheet opens for an article without AI
+  // This is the key innovation: AI analysis appears automatically as the user reads
+  // Uses gpt-4o-mini (very low cost) and results are cached permanently in Firestore
   useEffect(() => {
-    if (article?.ai) {
-      setAiContent(article.ai)
-    } else {
-      setAiContent(null)
+    if (
+      open &&
+      article &&
+      !article.ai &&
+      isAuthenticated &&
+      !isAnonymous &&
+      !generateAI.isPending &&
+      autoTriggeredRef.current !== article.id
+    ) {
+      // Mark as triggered to prevent re-firing
+      autoTriggeredRef.current = article.id
+
+      generateAI.mutate(article.id, {
+        onSuccess: (data) => {
+          setGeneratedAI({
+            id: article.id,
+            ai: {
+              ...data.ai,
+              generatedAt: { toDate: () => new Date(data.ai.generatedAt) } as unknown as Timestamp,
+            } as ArticleAI,
+          })
+          setAiError(false)
+        },
+        onError: () => {
+          // Silently fail for auto-trigger — user can manually retry
+          setAiError(true)
+        },
+      })
     }
-  }, [article?.id, article?.ai])
+
+    // Reset state when sheet closes
+    if (!open) {
+      autoTriggeredRef.current = null
+    }
+  }, [open, article?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!article) return null
 
@@ -112,29 +157,32 @@ export function ArticleDetailSheet({
     )
   }
 
-  const handleGenerateAI = () => {
+  const handleRetryAI = () => {
     if (!isAuthenticated) {
       toast.error("Sign in to unlock AI insights")
       return
     }
     hapticLight()
+    setAiError(false)
 
     generateAI.mutate(article.id, {
       onSuccess: (data) => {
-        // Convert generatedAt string to Timestamp-like object for display
-        setAiContent({
-          ...data.ai,
-          generatedAt: { toDate: () => new Date(data.ai.generatedAt) } as unknown as Timestamp,
-        } as ArticleAI)
+        setGeneratedAI({
+          id: article.id,
+          ai: {
+            ...data.ai,
+            generatedAt: { toDate: () => new Date(data.ai.generatedAt) } as unknown as Timestamp,
+          } as ArticleAI,
+        })
+        setAiError(false)
 
         if (!data.cached) {
-          toast.success("AI analysis generated", {
-            description: `${data.remaining} remaining today`,
-          })
+          toast.success("AI analysis generated")
         }
       },
       onError: (error) => {
         console.error("Failed to generate AI:", error)
+        setAiError(true)
         toast.error("Failed to generate analysis", {
           description: "Please try again later",
         })
@@ -179,7 +227,7 @@ export function ArticleDetailSheet({
           </div>
         )}
 
-        {/* AI Analysis Card */}
+        {/* AI Analysis Section */}
         {isGenerating ? (
           <SheetAICardSkeleton className={SHEET_TOKENS.sectionMargin} />
         ) : hasAI ? (
@@ -189,22 +237,42 @@ export function ArticleDetailSheet({
             whyItMatters={aiContent.whyItMatters}
             topics={aiContent.topics}
           />
-        ) : (
-          /* Generate AI Analysis button when no AI available */
+        ) : aiError ? (
+          /* Error state — compact retry prompt */
           <div className={SHEET_TOKENS.sectionMargin}>
             <button
-              onClick={handleGenerateAI}
-              disabled={isGenerating}
-              className="group flex w-full items-center justify-center gap-[10px] rounded-[var(--radius-2xl)] border border-dashed border-[var(--color-border-strong)] bg-[var(--color-fill-quaternary)] px-[20px] py-[18px] text-[15px] font-medium text-[var(--color-text-secondary)] transition-all duration-200 hover:border-[var(--color-accent)] hover:bg-[var(--color-accent-soft)] hover:text-[var(--color-accent)] active:scale-[0.98] disabled:opacity-50"
+              onClick={handleRetryAI}
+              className={cn(
+                "flex w-full items-center justify-center gap-[8px]",
+                "rounded-[var(--radius-xl)] bg-[var(--color-fill-quaternary)]",
+                "px-[16px] py-[14px]",
+                "text-[14px] font-medium text-[var(--color-text-tertiary)]",
+                "transition-all duration-[var(--duration-fast)] ease-[var(--ease-ios)]",
+                "active:scale-[0.98] active:bg-[var(--color-fill-tertiary)]",
+              )}
             >
-              <Sparkles className="h-[18px] w-[18px] transition-colors group-hover:text-[var(--color-accent)]" />
-              <span>Generate AI Analysis</span>
+              <AlertCircle className="h-[15px] w-[15px] opacity-60" strokeWidth={1.8} />
+              <span>Couldn't generate analysis · Tap to retry</span>
             </button>
           </div>
-        )}
+        ) : !isAuthenticated || isAnonymous ? (
+          /* Unauthenticated — show sign-in prompt */
+          <div className={SHEET_TOKENS.sectionMargin}>
+            <div className={cn(
+              "flex w-full items-center justify-center gap-[8px]",
+              "rounded-[var(--radius-xl)] bg-[var(--color-fill-quaternary)]",
+              "px-[16px] py-[14px]",
+            )}>
+              <Sparkles className="h-[14px] w-[14px] text-[var(--color-text-quaternary)]" strokeWidth={2} />
+              <span className="text-[14px] font-medium text-[var(--color-text-tertiary)]">
+                Sign in for AI analysis
+              </span>
+            </div>
+          </div>
+        ) : null}
 
-        {/* Original Snippet */}
-        {article.snippet && !hasAI && (
+        {/* Original Snippet — shown when no AI available */}
+        {article.snippet && !hasAI && !isGenerating && (
           <SheetSnippet>{article.snippet}</SheetSnippet>
         )}
 
@@ -230,4 +298,3 @@ export function ArticleDetailSheet({
     </Sheet>
   )
 }
-
