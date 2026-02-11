@@ -247,8 +247,40 @@ export interface UserPreferences {
     dailyBrief: boolean;
     breakingNews: boolean;
   };
+  /** Watchlist topics (canonical form) for Industry Pulse */
+  watchlistTopics?: string[];
   /** Last updated timestamp */
   updatedAt: Timestamp;
+}
+
+// ============================================================================
+// Signals Cache Collection: signals/{dateKey_wWindowDays}
+// ============================================================================
+
+export interface SignalItemDoc {
+  topic: string;
+  canonical: string;
+  recentCount: number;
+  prevCount: number;
+  delta: number;
+  why?: string;
+  implication?: string;
+}
+
+export interface SignalsCacheDoc {
+  dateKey: string;
+  windowDays: number;
+  rising: SignalItemDoc[];
+  falling: SignalItemDoc[];
+  persistent: SignalItemDoc[];
+  meta: {
+    dateKey: string;
+    windowDays: number;
+    recentDates: string[];
+    prevDates: string[];
+    totalTopics: number;
+  };
+  createdAt: Timestamp;
 }
 
 // ============================================================================

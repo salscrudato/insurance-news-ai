@@ -1,5 +1,6 @@
 export { TodayPage } from "./TodayPage"
 export { FeedPage } from "./FeedPage"
+export { PulsePage } from "./PulsePage"
 export { SettingsPage } from "./SettingsPage"
 export { AskPage } from "./AskPage"
 export { TermsPage } from "./TermsPage"

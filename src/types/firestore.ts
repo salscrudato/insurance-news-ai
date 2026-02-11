@@ -247,8 +247,48 @@ export interface UserPreferences {
     dailyBrief: boolean;
     breakingNews: boolean;
   };
+  /** Watchlist topics (canonical form) for Industry Pulse */
+  watchlistTopics?: string[];
   /** Last updated timestamp */
   updatedAt: Timestamp;
+}
+
+// ============================================================================
+// Signals (Industry Pulse) — Response types
+// ============================================================================
+
+export interface SignalItem {
+  topic: string;
+  canonical: string;
+  recentCount: number;
+  prevCount: number;
+  delta: number;
+  /** Percentage of recent window days with this topic (0-100) */
+  intensity: number;
+  /** Per-day appearance flags: 1 = present, 0 = absent. Oldest first. */
+  sparkline: number[];
+  why?: string;
+  implication?: string;
+  severity?: "low" | "medium" | "high" | "critical";
+}
+
+export interface SignalsMeta {
+  dateKey: string;
+  windowDays: number;
+  recentDates: string[];
+  prevDates: string[];
+  totalTopics: number;
+  briefsAvailable: number;
+}
+
+export interface PulseSignalsResponse {
+  cached: boolean;
+  /** AI-generated executive market narrative */
+  narrative: string;
+  rising: SignalItem[];
+  falling: SignalItem[];
+  persistent: SignalItem[];
+  meta: SignalsMeta;
 }
 
 // ============================================================================

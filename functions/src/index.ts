@@ -62,6 +62,12 @@ import {
   sendNotificationToOptedInUsers,
   formatDateForNotification,
 } from "./lib/notifications/index.js";
+import {
+  computeSignals,
+  dateRange,
+  type SignalItem,
+  type BriefTopicsInput,
+} from "./lib/signals/index.js";
 import type { Article, Brief } from "./types/firestore.js";
 
 // Initialize Firebase Admin
@@ -1764,6 +1770,337 @@ export const answerQuestionRagStream = onRequest(
     }
   }
 );
+
+// ============================================================================
+// Industry Pulse — Signals API
+// ============================================================================
+
+interface GetPulseSignalsData {
+  windowDays?: number;
+  dateKey?: string;
+}
+
+/** JSON schema for AI signal insights structured output */
+const SIGNAL_INSIGHTS_SCHEMA = {
+  type: "object" as const,
+  properties: {
+    narrative: {
+      type: "string",
+      description:
+        "2-3 sentence executive overview of the current P&C market signal landscape. Written for a CRO or VP Underwriting audience. Reference the most significant shifts concretely.",
+    },
+    insights: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          topic: {
+            type: "string",
+            description: "The topic name (must match one of the input topics exactly)",
+          },
+          why: {
+            type: "string",
+            description:
+              "1 sharp sentence explaining why this topic is trending (rising, falling, or persisting). Reference concrete drivers: events, rulings, earnings, CAT events, regulatory actions. No generic filler.",
+          },
+          implication: {
+            type: "string",
+            description:
+              "1 actionable sentence on what this means for P&C underwriters, claims managers, or risk officers. Specificity matters: mention lines of business, geographies, or financial impact where possible.",
+          },
+          severity: {
+            type: "string",
+            enum: ["low", "medium", "high", "critical"],
+            description:
+              "How much attention this signal deserves. critical = immediate portfolio/pricing action needed. high = significant market shift, monitor closely. medium = notable trend worth tracking. low = emerging signal, early stage.",
+          },
+        },
+        required: ["topic", "why", "implication", "severity"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["narrative", "insights"],
+  additionalProperties: false,
+};
+
+interface SignalInsight {
+  topic: string;
+  why: string;
+  implication: string;
+  severity: "low" | "medium" | "high" | "critical";
+}
+
+interface SignalInsightsResponse {
+  narrative: string;
+  insights: SignalInsight[];
+}
+
+/**
+ * Callable function to get Industry Pulse signal trends.
+ *
+ * Computes rising, falling, and persistent topic trends from daily brief topics
+ * over two adjacent time windows. Caches results in Firestore.
+ * Generates AI interpretations for top rising signals.
+ *
+ * @param windowDays - Size of each comparison window (default: 7, max: 30)
+ * @param dateKey - Reference date yyyy-mm-dd (default: today ET)
+ * @returns Rising, falling, persistent signal lists with AI insights
+ */
+export const getPulseSignals = onCall<GetPulseSignalsData>(
+  {
+    secrets: [openaiApiKey],
+    memory: "256MiB",
+    timeoutSeconds: 60,
+  },
+  async (request) => {
+    const { windowDays: rawWindow, dateKey: rawDate } = request.data || {};
+
+    // Validate & default windowDays
+    const windowDays = Math.max(1, Math.min(Number(rawWindow) || 7, 30));
+
+    // Validate & default dateKey
+    const dateKey = rawDate || getTodayDateET();
+    if (rawDate && !DATE_REGEX.test(rawDate)) {
+      throw new HttpsError(
+        "invalid-argument",
+        "dateKey must be in yyyy-mm-dd format."
+      );
+    }
+
+    console.log(`[getPulseSignals] dateKey=${dateKey}, windowDays=${windowDays}`);
+
+    // ---- Check Firestore cache ----
+    const cacheDocId = `${dateKey}_w${windowDays}`;
+    const cacheRef = db.collection("signals").doc(cacheDocId);
+    const cachedDoc = await cacheRef.get();
+
+    if (cachedDoc.exists) {
+      console.log(`[getPulseSignals] Cache hit: ${cacheDocId}`);
+      const cached = cachedDoc.data()!;
+      return {
+        cached: true,
+        narrative: cached.narrative || "",
+        rising: cached.rising,
+        falling: cached.falling,
+        persistent: cached.persistent,
+        meta: cached.meta,
+      };
+    }
+
+    // ---- Fetch briefs over the full 2*windowDays range ----
+    // We need: [dateKey - (2*windowDays - 1) ... dateKey]
+    const allDates = dateRange(dateKey, windowDays * 2);
+    const dateSet = new Set(allDates);
+
+    // Batch fetch briefs — Firestore "in" supports max 30 items per query
+    // For windows up to 30 days we need up to 60 dates — batch in groups of 30
+    const briefInputs: BriefTopicsInput[] = [];
+    const dateBatches: string[][] = [];
+    const allDatesArr = [...dateSet];
+
+    for (let i = 0; i < allDatesArr.length; i += 30) {
+      dateBatches.push(allDatesArr.slice(i, i + 30));
+    }
+
+    // Use getAll for efficiency (single round-trip per batch)
+    for (const batch of dateBatches) {
+      const refs = batch.map((d) => db.collection("briefs").doc(d));
+      if (refs.length === 0) continue;
+      const docs = await db.getAll(...refs);
+      for (const doc of docs) {
+        if (!doc.exists) continue;
+        const data = doc.data() as Brief;
+        if (data.topics && data.topics.length > 0) {
+          briefInputs.push({
+            date: doc.id,
+            topics: data.topics,
+          });
+        }
+      }
+    }
+
+    console.log(
+      `[getPulseSignals] Fetched ${briefInputs.length} briefs with topics out of ${allDatesArr.length} dates`
+    );
+
+    // ---- Compute signals ----
+    const signals = computeSignals(briefInputs, dateKey, windowDays);
+
+    // ---- Generate AI insights for ALL signal categories ----
+    // Collect the most important signals across all categories for AI analysis
+    const topRising = signals.rising.slice(0, 10);
+    const topFalling = signals.falling.slice(0, 5);
+    const topPersistent = signals.persistent.slice(0, 5);
+    const allTopSignals = [
+      ...topRising.map((s) => ({ ...s, _category: "rising" as const })),
+      ...topFalling.map((s) => ({ ...s, _category: "falling" as const })),
+      ...topPersistent.map((s) => ({ ...s, _category: "persistent" as const })),
+    ];
+
+    let narrative = "";
+
+    if (allTopSignals.length > 0) {
+      try {
+        // Build compact context from recent briefs (executiveSummary + topics only)
+        const recentDates = dateRange(dateKey, Math.min(windowDays, 7));
+        const contextBriefs: Array<{ date: string; summary: string[]; topics: string[] }> = [];
+
+        const contextRefs = recentDates.map((d) => db.collection("briefs").doc(d));
+        const contextDocs = contextRefs.length > 0 ? await db.getAll(...contextRefs) : [];
+
+        for (const doc of contextDocs) {
+          if (!doc.exists) continue;
+          const data = doc.data() as Brief;
+          contextBriefs.push({
+            date: doc.id,
+            summary: data.executiveSummary || [],
+            topics: data.topics || [],
+          });
+        }
+
+        // Build compact context string
+        const contextStr = contextBriefs
+          .sort((a, b) => b.date.localeCompare(a.date))
+          .map(
+            (b) =>
+              `[${b.date}]\nSummary: ${b.summary.join(" | ")}\nTopics: ${b.topics.join(", ")}`
+          )
+          .join("\n\n");
+
+        // Build categorized topic list for the prompt
+        const risingStr = topRising.map((s) => `${s.topic} (+${s.delta})`).join(", ");
+        const fallingStr = topFalling.map((s) => `${s.topic} (${s.delta})`).join(", ");
+        const persistentStr = topPersistent.map((s) => `${s.topic} (${s.recentCount}/${windowDays}d)`).join(", ");
+
+        let topicPromptParts = "";
+        if (risingStr) topicPromptParts += `RISING: ${risingStr}\n`;
+        if (fallingStr) topicPromptParts += `FALLING: ${fallingStr}\n`;
+        if (persistentStr) topicPromptParts += `PERSISTENT: ${persistentStr}\n`;
+
+        const openai = getOpenAIClient();
+        const aiResponse = await withRetry(
+          () =>
+            openai.responses.create({
+              model: AI_MODEL,
+              max_output_tokens: 2000,
+              input: [
+                {
+                  role: "system",
+                  content: `You are a senior P&C insurance market analyst producing a signal intelligence report for CROs and VP-level underwriting leadership.
+
+Rules:
+- "narrative": 2-3 sentences, executive tone. Reference the most significant market shifts by name. No preamble like "This week...".
+- "insights": For EACH listed topic, provide:
+  - "why": 1 sentence. Be SPECIFIC — cite the concrete driver (a ruling, a carrier action, a CAT event, earnings, regulation). Never say "various factors" or "ongoing trends".
+  - "implication": 1 sentence. Be ACTIONABLE — mention the affected line of business, geography, or financial metric. A VP Underwriting should know what to do differently after reading this.
+  - "severity": critical (immediate pricing/portfolio action needed), high (significant shift, active monitoring required), medium (notable, track it), low (emerging, worth noting).
+- Match each topic name EXACTLY as provided.
+- Use standard P&C terminology: combined ratio, loss development, rate adequacy, CAT loading, etc.`,
+                },
+                {
+                  role: "user",
+                  content: `Recent daily brief context (${windowDays}D window):\n${contextStr}\n\nSignal topics to analyze:\n${topicPromptParts}\nProvide the narrative and insights.`,
+                },
+              ],
+              text: {
+                format: {
+                  type: "json_schema",
+                  name: "signal_insights",
+                  schema: SIGNAL_INSIGHTS_SCHEMA,
+                  strict: true,
+                },
+              },
+            }),
+          { maxRetries: 2, baseDelayMs: 1000, label: "getPulseSignals/AI" }
+        );
+
+        const parsed: SignalInsightsResponse = JSON.parse(aiResponse.output_text);
+
+        // Store narrative
+        narrative = parsed.narrative || "";
+
+        // Attach insights to signals across ALL categories by canonical match
+        if (parsed.insights && Array.isArray(parsed.insights)) {
+          const insightMap = new Map<string, SignalInsight>();
+          for (const insight of parsed.insights) {
+            const canon = insight.topic.trim().toLowerCase().replace(/\s+/g, " ");
+            insightMap.set(canon, insight);
+          }
+
+          const applyInsights = (signalList: SignalItem[]) => {
+            for (const signal of signalList) {
+              const insight = insightMap.get(signal.canonical);
+              if (insight) {
+                signal.why = insight.why;
+                signal.implication = insight.implication;
+                signal.severity = insight.severity;
+              }
+            }
+          };
+
+          applyInsights(signals.rising);
+          applyInsights(signals.falling);
+          applyInsights(signals.persistent);
+        }
+
+        console.log(
+          `[getPulseSignals] AI generated ${parsed.insights?.length ?? 0} insights + narrative (${narrative.length} chars)`
+        );
+      } catch (aiError) {
+        // AI insights are non-critical — log and continue
+        console.error(
+          "[getPulseSignals] AI insight generation failed:",
+          aiError instanceof Error ? aiError.message : "Unknown error"
+        );
+      }
+    }
+
+    // ---- Cache in Firestore ----
+    const responsePayload = {
+      narrative,
+      rising: signals.rising.map(serializeSignal),
+      falling: signals.falling.map(serializeSignal),
+      persistent: signals.persistent.map(serializeSignal),
+      meta: signals.meta,
+    };
+
+    try {
+      await cacheRef.set({
+        ...responsePayload,
+        dateKey,
+        windowDays,
+        createdAt: Timestamp.now(),
+      });
+      console.log(`[getPulseSignals] Cached as ${cacheDocId}`);
+    } catch (cacheError) {
+      // Non-critical — log and continue
+      console.error(
+        "[getPulseSignals] Cache write failed:",
+        cacheError instanceof Error ? cacheError.message : "Unknown error"
+      );
+    }
+
+    return { cached: false, ...responsePayload };
+  }
+);
+
+/** Serialize a SignalItem for Firestore/response (strip undefined fields) */
+function serializeSignal(s: SignalItem) {
+  const result: Record<string, unknown> = {
+    topic: s.topic,
+    canonical: s.canonical,
+    recentCount: s.recentCount,
+    prevCount: s.prevCount,
+    delta: s.delta,
+    intensity: s.intensity,
+    sparkline: s.sparkline,
+  };
+  if (s.why) result.why = s.why;
+  if (s.implication) result.implication = s.implication;
+  if (s.severity) result.severity = s.severity;
+  return result;
+}
 
 // ============================================================================
 // Account Deletion (App Store Guideline 5.1.1(v))

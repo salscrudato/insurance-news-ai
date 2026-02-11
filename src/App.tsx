@@ -10,6 +10,7 @@ import { Toaster } from "@/components/ui/sonner"
 import {
   TodayPage,
   FeedPage,
+  PulsePage,
   SettingsPage,
   AskPage,
   TermsPage,
@@ -96,6 +97,7 @@ function AppRoutes() {
       >
         <Route path="/" element={<TodayPage />} />
         <Route path="/feed" element={<FeedPage />} />
+        <Route path="/pulse" element={<PulsePage />} />
         <Route path="/ask" element={<AskPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>

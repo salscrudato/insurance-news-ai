@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom"
-import { Newspaper, LayoutList, Settings, ChevronRight, Sparkles, type LucideIcon } from "lucide-react"
+import { Newspaper, LayoutList, Settings, ChevronRight, Sparkles, BarChart3, type LucideIcon } from "lucide-react"
 import { AppLogo } from "@/components/ui/app-logo"
 import {
   Sheet,
@@ -27,6 +27,7 @@ interface NavItem {
 const primaryNavItems: NavItem[] = [
   { path: "/", label: "Today", icon: Newspaper, description: "Daily brief" },
   { path: "/feed", label: "Feed", icon: LayoutList, description: "All articles" },
+  { path: "/pulse", label: "Pulse", icon: BarChart3, description: "Trending signals" },
   { path: "/ask", label: "Ask AI", icon: Sparkles, description: "Chat with sources" },
 ]
 

@@ -23,4 +23,6 @@ export {
   type CreateThreadInput,
   type AppendMessageInput,
 } from "./use-chat-threads"
+export { useSignals } from "./use-signals"
+export { useWatchlist, useToggleWatchlistTopic } from "./use-watchlist"
 

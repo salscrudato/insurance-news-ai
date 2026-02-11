@@ -14,7 +14,8 @@
     "backfill-embeddings": "npm run build && node lib/scripts/backfill-embeddings.js",
     "check-data": "npm run build && node lib/scripts/check-data.js",
     "show-brief": "npm run build && node lib/scripts/show-brief.js",
-    "regenerate-brief": "npm run build && node lib/scripts/regenerate-brief.js"
+    "regenerate-brief": "npm run build && node lib/scripts/regenerate-brief.js",
+    "backfill-historical": "npm run build && node lib/scripts/backfill-historical.js"
   },
   "engines": {
     "node": "22"
