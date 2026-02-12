@@ -124,6 +124,16 @@ export interface Filing {
   url: string
 }
 
+export interface InsuranceRatios {
+  fiscalDateEnding: string
+  netPremiumsEarned: number | null
+  incurredLosses: number | null
+  underwritingExpenses: number | null
+  lossRatio: number | null
+  expenseRatio: number | null
+  combinedRatio: number | null
+}
+
 export interface EarningsBundle {
   profile: CompanyProfile
   quote: CompanyQuote | null
@@ -136,6 +146,7 @@ export interface EarningsBundle {
     balance: BalanceSheet[]
     cashflow: CashFlowStatement[]
   }
+  insuranceRatios: InsuranceRatios[] | null
   filings: Filing[] | null
   updatedAt: string
   dataSources?: {
@@ -146,6 +157,7 @@ export interface EarningsBundle {
     profile?: "alpha-vantage" | "yahoo" | "none"
     quote?: "yahoo" | "alpha-vantage" | "none"
     filings?: "sec-edgar" | "none"
+    insuranceRatios?: "sec-xbrl" | "none"
   }
 }
 

@@ -35,6 +35,7 @@ export {
   type CompanySearchResult,
   type EarningsBundle,
   type EarningsAIInsights,
+  type InsuranceRatios,
   type FilingRemarks,
   type QuarterlyEarning,
   type IncomeStatement,

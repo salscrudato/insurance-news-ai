@@ -98,6 +98,7 @@ import {
   xbrlGetQuarterlyIncome,
   xbrlGetQuarterlyBalance,
   xbrlGetEntityName,
+  xbrlGetInsuranceRatios,
   // Cache
   getOrFetch,
   getCached,
@@ -3627,13 +3628,15 @@ export const getCompanyEarningsBundle = onCall<{ ticker: string }>(
       // ================================================================
       const bundleCache = await getCachedBundle<EarningsBundle>(sym);
       if (bundleCache && !bundleCache.isStale) {
-        // Only serve from cache if it has the new dataSources field
-        // (old pre-XBRL bundles are treated as stale to get XBRL-enriched data)
-        if (bundleCache.data.dataSources) {
+        // Only serve from cache if it has the new dataSources field with insuranceRatios
+        // (old bundles missing insuranceRatios field are treated as stale to get ratio data)
+        const hasDataSources = !!bundleCache.data.dataSources;
+        const hasRatiosField = "insuranceRatios" in bundleCache.data;
+        if (hasDataSources && hasRatiosField) {
           console.log(`[getCompanyEarningsBundle] Bundle cache hit for ${sym} (${Date.now() - startMs}ms)`);
           return bundleCache.data;
         }
-        console.log(`[getCompanyEarningsBundle] Stale pre-XBRL bundle for ${sym}, refreshing`);
+        console.log(`[getCompanyEarningsBundle] Stale bundle for ${sym} (missing ratios or dataSources), refreshing`);
       }
 
       // If stale bundle exists, the stale-while-revalidate logic
@@ -3685,13 +3688,15 @@ export const getCompanyEarningsBundle = onCall<{ ticker: string }>(
       // SEC filings — free, no API key, 10 req/sec limit)
       // This is the AUTHORITATIVE source for EPS, revenue, balance sheet
       // ================================================================
-      const [xbrlEarnings, xbrlIncome, xbrlBalance] = await Promise.all([
+      const [xbrlEarnings, xbrlIncome, xbrlBalance, xbrlInsuranceRatios] = await Promise.all([
         safeFetch(`xbrl-earnings:${sym}`, CACHE_TTL.earnings,
           () => xbrlGetQuarterlyEarnings(sym, 8), null as import("./lib/earnings/types.js").QuarterlyEarning[] | null),
         safeFetch(`xbrl-income:${sym}`, CACHE_TTL.financials,
           () => xbrlGetQuarterlyIncome(sym, 8), null as IncomeStatement[] | null),
         safeFetch(`xbrl-balance:${sym}`, CACHE_TTL.financials,
           () => xbrlGetQuarterlyBalance(sym, 8), null as BalanceSheet[] | null),
+        safeFetch(`xbrl-ratios:${sym}`, CACHE_TTL.financials,
+          () => xbrlGetInsuranceRatios(sym, 8), null as import("./lib/earnings/types.js").InsuranceRatios[] | null),
       ]);
 
       const hasXbrlEarnings = xbrlEarnings && xbrlEarnings.length > 0;
@@ -3837,6 +3842,7 @@ export const getCompanyEarningsBundle = onCall<{ ticker: string }>(
           quarterlyHistory: earnings.quarterlyEarnings,
         },
         financials: { income, balance, cashflow },
+        insuranceRatios: xbrlInsuranceRatios ?? null,
         filings,
         updatedAt: new Date().toISOString(),
         dataSources: {
@@ -3847,6 +3853,7 @@ export const getCompanyEarningsBundle = onCall<{ ticker: string }>(
           profile: profileOk(profile) ? "alpha-vantage" : "none",
           quote: yfQuote ? "yahoo" : (quote ? "alpha-vantage" : "none"),
           filings: filings && filings.length > 0 ? "sec-edgar" : "none",
+          insuranceRatios: xbrlInsuranceRatios && xbrlInsuranceRatios.length > 0 ? "sec-xbrl" : "none",
         },
       };
 
@@ -4261,6 +4268,7 @@ export const refreshEarningsWatchlistCache = onSchedule(
               balance: balance ?? [],
               cashflow: cashflow ?? [],
             },
+            insuranceRatios: null,
             filings: freshFilings,
             updatedAt: new Date().toISOString(),
           };

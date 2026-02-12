@@ -33,6 +33,7 @@ import {
 import type {
   EarningsBundle,
   EarningsAIInsights,
+  InsuranceRatios,
   IncomeStatement,
   BalanceSheet,
   CashFlowStatement,
@@ -101,7 +102,7 @@ async function openUrl(url: string) {
 // Tab System
 // ============================================================================
 
-type TabId = "overview" | "financials" | "filings" | "insights" | "remarks"
+type TabId = "overview" | "underwriting" | "financials" | "filings" | "insights" | "remarks"
 
 interface TabDef {
   id: TabId
@@ -111,6 +112,7 @@ interface TabDef {
 
 const TABS: TabDef[] = [
   { id: "overview", label: "Overview", available: () => true },
+  { id: "underwriting", label: "Underwriting", available: (b) => b.insuranceRatios !== null && b.insuranceRatios.length > 0 },
   { id: "financials", label: "Financials", available: () => true },
   { id: "filings", label: "Filings", available: (b) => b.filings !== null },
   { id: "insights", label: "AI Insights", available: () => true },
@@ -209,9 +211,11 @@ function yoyChange(current: number | null | undefined, history: Array<{ val: num
 }
 
 function OverviewTab({ bundle }: { bundle: EarningsBundle }) {
-  const { profile, quote, earnings, financials, dataSources } = bundle
+  const { profile, quote, earnings, financials, insuranceRatios, dataSources } = bundle
   const latestQ = earnings.quarterlyHistory[0]
   const latestIncome = financials.income[0]
+  const latestRatios = insuranceRatios?.[0] ?? null
+  const isInsurer = insuranceRatios !== null && insuranceRatios.length > 0
 
   // Build YoY helper arrays
   const epsHistory = earnings.quarterlyHistory.map((q) => ({ val: q.reportedEPS }))
@@ -277,6 +281,11 @@ function OverviewTab({ bundle }: { bundle: EarningsBundle }) {
             </span>
           </div>
         </div>
+      )}
+
+      {/* Insurance Ratios Summary Card (for insurers only) */}
+      {isInsurer && latestRatios && (
+        <InsuranceRatiosSummaryCard ratios={latestRatios} />
       )}
 
       {/* Latest Quarter KPIs */}
@@ -440,6 +449,349 @@ function OverviewTab({ bundle }: { bundle: EarningsBundle }) {
       {profile.description && (
         <ExpandableDescription text={profile.description} />
       )}
+    </div>
+  )
+}
+
+// ============================================================================
+// Insurance Ratios Summary Card (compact, shown in Overview tab)
+// ============================================================================
+
+function ratioColor(val: number | null, thresholds: { good: number; warn: number }): string {
+  if (val === null) return "var(--color-text-secondary)"
+  const pct = val * 100
+  if (pct <= thresholds.good) return "var(--color-success)"
+  if (pct <= thresholds.warn) return "var(--color-warning)"
+  return "var(--color-destructive)"
+}
+
+function ratioLabel(val: number | null): string {
+  if (val === null) return "—"
+  return `${(val * 100).toFixed(1)}%`
+}
+
+function InsuranceRatiosSummaryCard({ ratios }: { ratios: InsuranceRatios }) {
+  return (
+    <div className="rounded-[14px] bg-[var(--color-surface)] shadow-[0_1px_3px_rgba(0,0,0,0.06),0_0_0_0.5px_rgba(0,0,0,0.04)] overflow-hidden">
+      {/* Header */}
+      <div className="px-[16px] pt-[14px] pb-[10px] flex items-center justify-between">
+        <div className="flex items-center gap-[8px]">
+          <div className="flex h-[26px] w-[26px] items-center justify-center rounded-[7px] bg-gradient-to-br from-[#3b82f6] to-[#1d4ed8]">
+            <svg viewBox="0 0 16 16" className="h-[13px] w-[13px] text-white fill-current">
+              <path d="M8 1a7 7 0 1 1 0 14A7 7 0 0 1 8 1Zm0 1.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM8 4a.75.75 0 0 1 .75.75v2.5h2a.75.75 0 0 1 0 1.5h-2v2a.75.75 0 0 1-1.5 0v-2h-2a.75.75 0 0 1 0-1.5h2v-2.5A.75.75 0 0 1 8 4Z"/>
+            </svg>
+          </div>
+          <div>
+            <span className="text-[13px] font-semibold tracking-[-0.08px] text-[var(--color-text-primary)]">
+              Underwriting Ratios
+            </span>
+            <span className="block text-[11px] text-[var(--color-text-quaternary)]">
+              {fmtQuarter(ratios.fiscalDateEnding)}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-[4px] px-[8px] py-[3px] rounded-[6px] bg-[rgba(59,130,246,0.08)]">
+          <svg viewBox="0 0 16 16" className="h-[11px] w-[11px] text-[#3b82f6] fill-current">
+            <path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0Zm3.78 5.22a.75.75 0 0 0-1.06 0L7 8.94 5.28 7.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.06 0l4.25-4.25a.75.75 0 0 0 0-1.06Z"/>
+          </svg>
+          <span className="text-[10px] font-semibold text-[#3b82f6]">SEC Filed</span>
+        </div>
+      </div>
+
+      {/* Ratio gauges */}
+      <div className="grid grid-cols-3 gap-[1px] bg-[var(--color-separator-light)]">
+        <RatioGauge
+          label="Loss Ratio"
+          value={ratios.lossRatio}
+          color={ratioColor(ratios.lossRatio, { good: 65, warn: 75 })}
+          description="Claims / Premiums"
+        />
+        <RatioGauge
+          label="Expense Ratio"
+          value={ratios.expenseRatio}
+          color={ratioColor(ratios.expenseRatio, { good: 28, warn: 35 })}
+          description="Expenses / Premiums"
+        />
+        <RatioGauge
+          label="Combined Ratio"
+          value={ratios.combinedRatio}
+          color={ratioColor(ratios.combinedRatio, { good: 95, warn: 100 })}
+          description={ratios.combinedRatio !== null && ratios.combinedRatio < 1 ? "Underwriting profit" : "Underwriting loss"}
+        />
+      </div>
+    </div>
+  )
+}
+
+function RatioGauge({ label, value, color, description }: { label: string; value: number | null; color: string; description: string }) {
+  const pct = value !== null ? value * 100 : null
+  // Gauge bar: for combined ratio, 100% = breakeven reference
+  const barPct = pct !== null ? Math.min(100, (pct / 120) * 100) : 0
+  const referenceLinePct = label === "Combined Ratio" ? (100 / 120) * 100 : null
+
+  return (
+    <div className="bg-[var(--color-surface)] px-[12px] py-[14px] flex flex-col items-center text-center">
+      <span className="text-[10px] font-medium tracking-[0.02em] text-[var(--color-text-tertiary)] mb-[8px]">
+        {label}
+      </span>
+      <span className="text-[22px] font-bold tracking-[-0.5px] tabular-nums mb-[4px]" style={{ color }}>
+        {ratioLabel(value)}
+      </span>
+      {/* Mini gauge bar */}
+      <div className="w-full h-[3px] bg-[var(--color-fill-tertiary)] rounded-full relative overflow-visible mt-[2px] mb-[6px]">
+        <div
+          className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
+          style={{ width: `${barPct}%`, backgroundColor: color }}
+        />
+        {referenceLinePct !== null && (
+          <div
+            className="absolute top-[-3px] bottom-[-3px] w-[1.5px] bg-[var(--color-text-quaternary)] rounded-full"
+            style={{ left: `${referenceLinePct}%` }}
+            title="100% breakeven"
+          />
+        )}
+      </div>
+      <span className="text-[10px] text-[var(--color-text-quaternary)] leading-[1.3]">
+        {description}
+      </span>
+    </div>
+  )
+}
+
+// ============================================================================
+// Underwriting Tab (full detailed view for insurers)
+// ============================================================================
+
+function UnderwritingTab({ ratios }: { ratios: InsuranceRatios[] }) {
+  // Sparkline data (reversed for left-to-right chronological)
+  const combinedData = ratios.filter((r) => r.combinedRatio !== null).map((r) => r.combinedRatio! * 100).reverse()
+  const lossData = ratios.filter((r) => r.lossRatio !== null).map((r) => r.lossRatio! * 100).reverse()
+  const premiumData = ratios.filter((r) => r.netPremiumsEarned !== null).map((r) => r.netPremiumsEarned!).reverse()
+
+  const latest = ratios[0]
+  const prior = ratios[4] // Same quarter last year (4 quarters back)
+
+  // YoY change for combined ratio
+  const combinedYoY = (latest?.combinedRatio != null && prior?.combinedRatio != null)
+    ? (latest.combinedRatio - prior.combinedRatio) * 100
+    : null
+
+  // Trend interpretation
+  const trendText = combinedYoY !== null
+    ? combinedYoY < 0
+      ? `Improving ${Math.abs(combinedYoY).toFixed(1)}pts YoY`
+      : combinedYoY > 0
+        ? `Deteriorating ${combinedYoY.toFixed(1)}pts YoY`
+        : "Flat YoY"
+    : null
+
+  return (
+    <div className="space-y-[20px]">
+      {/* Header insight */}
+      <div className="rounded-[14px] bg-[var(--color-surface)] shadow-[0_1px_3px_rgba(0,0,0,0.06),0_0_0_0.5px_rgba(0,0,0,0.04)] px-[16px] py-[16px]">
+        <div className="flex items-center gap-[8px] mb-[10px]">
+          <div className="flex h-[28px] w-[28px] items-center justify-center rounded-[8px] bg-gradient-to-br from-[#3b82f6] to-[#1d4ed8]">
+            <svg viewBox="0 0 20 20" className="h-[14px] w-[14px] text-white fill-current">
+              <path fillRule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clipRule="evenodd" />
+            </svg>
+          </div>
+          <div className="flex-1">
+            <h3 className="text-[15px] font-bold tracking-[-0.3px] text-[var(--color-text-primary)]">
+              Underwriting Performance
+            </h3>
+            <span className="text-[12px] text-[var(--color-text-tertiary)]">
+              From SEC filings (audited data)
+            </span>
+          </div>
+        </div>
+        {latest?.combinedRatio != null && (
+          <div className="flex items-baseline gap-[10px]">
+            <span
+              className="text-[32px] font-bold tracking-[-1px] tabular-nums"
+              style={{ color: ratioColor(latest.combinedRatio, { good: 95, warn: 100 }) }}
+            >
+              {ratioLabel(latest.combinedRatio)}
+            </span>
+            <div className="flex flex-col">
+              <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">
+                Combined Ratio
+              </span>
+              {trendText && (
+                <span className={cn(
+                  "text-[11px] font-semibold",
+                  combinedYoY !== null && combinedYoY < 0 ? "text-[var(--color-success)]" : "text-[var(--color-destructive)]"
+                )}>
+                  {trendText}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Sparklines row */}
+      {(combinedData.length >= 2 || premiumData.length >= 2) && (
+        <div className="flex gap-[12px]">
+          {combinedData.length >= 2 && (
+            <div className="flex-1 rounded-[12px] bg-[var(--color-surface)] px-[14px] py-[12px] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_0_0_0.5px_rgba(0,0,0,0.03)]">
+              <div className="flex items-center justify-between mb-[6px]">
+                <span className="text-[11px] font-medium tracking-[0.02em] text-[var(--color-text-tertiary)]">
+                  Combined Ratio
+                </span>
+                <span className="text-[11px] font-semibold tabular-nums text-[var(--color-text-secondary)]">
+                  {combinedData[combinedData.length - 1].toFixed(1)}%
+                </span>
+              </div>
+              <Sparkline data={combinedData} color="#3b82f6" width={140} height={32} />
+            </div>
+          )}
+          {premiumData.length >= 2 && (
+            <div className="flex-1 rounded-[12px] bg-[var(--color-surface)] px-[14px] py-[12px] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_0_0_0.5px_rgba(0,0,0,0.03)]">
+              <div className="flex items-center justify-between mb-[6px]">
+                <span className="text-[11px] font-medium tracking-[0.02em] text-[var(--color-text-tertiary)]">
+                  Net Premiums
+                </span>
+                <span className="text-[11px] font-semibold tabular-nums text-[var(--color-text-secondary)]">
+                  {fmt(premiumData[premiumData.length - 1], { prefix: "$", compact: true })}
+                </span>
+              </div>
+              <Sparkline data={premiumData} color="var(--color-success)" width={140} height={32} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Breakdown: Loss + Expense sparklines */}
+      {lossData.length >= 2 && (
+        <div className="flex gap-[12px]">
+          <div className="flex-1 rounded-[12px] bg-[var(--color-surface)] px-[14px] py-[12px] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_0_0_0.5px_rgba(0,0,0,0.03)]">
+            <div className="flex items-center justify-between mb-[6px]">
+              <span className="text-[11px] font-medium tracking-[0.02em] text-[var(--color-text-tertiary)]">
+                Loss Ratio
+              </span>
+              <span className="text-[11px] font-semibold tabular-nums text-[var(--color-text-secondary)]">
+                {lossData[lossData.length - 1].toFixed(1)}%
+              </span>
+            </div>
+            <Sparkline data={lossData} color="#ef4444" width={140} height={32} />
+          </div>
+          <div className="flex-1 rounded-[12px] bg-[var(--color-surface)] px-[14px] py-[12px] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_0_0_0.5px_rgba(0,0,0,0.03)]">
+            <div className="flex items-center justify-between mb-[6px]">
+              <span className="text-[11px] font-medium tracking-[0.02em] text-[var(--color-text-tertiary)]">
+                Expense Ratio
+              </span>
+              <span className="text-[11px] font-semibold tabular-nums text-[var(--color-text-secondary)]">
+                {ratios.filter((r) => r.expenseRatio != null).length > 0
+                  ? `${(ratios.filter((r) => r.expenseRatio != null)[0].expenseRatio! * 100).toFixed(1)}%`
+                  : "—"}
+              </span>
+            </div>
+            <Sparkline
+              data={ratios.filter((r) => r.expenseRatio != null).map((r) => r.expenseRatio! * 100).reverse()}
+              color="#f59e0b"
+              width={140}
+              height={32}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Quarterly ratios table */}
+      <div>
+        <h3 className="text-[12px] font-semibold tracking-[0.04em] uppercase text-[var(--color-text-tertiary)] mb-[8px] px-[2px]">
+          Quarterly Ratios
+        </h3>
+        <div className="overflow-hidden rounded-[12px] bg-[var(--color-surface)] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_0_0_0.5px_rgba(0,0,0,0.03)]">
+          {/* Header */}
+          <div className="grid grid-cols-4 gap-[4px] px-[12px] py-[8px] bg-[var(--color-fill-quaternary)]">
+            {["Quarter", "Loss", "Expense", "Combined"].map((h) => (
+              <span key={h} className="text-[10px] font-semibold tracking-[0.03em] uppercase text-[var(--color-text-tertiary)] text-center">
+                {h}
+              </span>
+            ))}
+          </div>
+          {/* Rows */}
+          {ratios.map((r, idx) => (
+            <div
+              key={r.fiscalDateEnding}
+              className={cn(
+                "grid grid-cols-4 gap-[4px] px-[12px] py-[10px]",
+                idx < ratios.length - 1 && "border-b border-[var(--color-separator-light)]"
+              )}
+            >
+              <span className="text-[13px] font-medium text-[var(--color-text-primary)] text-center">
+                {fmtQuarter(r.fiscalDateEnding)}
+              </span>
+              <span
+                className="text-[13px] font-semibold tabular-nums text-center"
+                style={{ color: ratioColor(r.lossRatio, { good: 65, warn: 75 }) }}
+              >
+                {ratioLabel(r.lossRatio)}
+              </span>
+              <span
+                className="text-[13px] font-semibold tabular-nums text-center"
+                style={{ color: ratioColor(r.expenseRatio, { good: 28, warn: 35 }) }}
+              >
+                {ratioLabel(r.expenseRatio)}
+              </span>
+              <span
+                className="text-[13px] font-bold tabular-nums text-center"
+                style={{ color: ratioColor(r.combinedRatio, { good: 95, warn: 100 }) }}
+              >
+                {ratioLabel(r.combinedRatio)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Underlying dollar amounts */}
+      <div>
+        <h3 className="text-[12px] font-semibold tracking-[0.04em] uppercase text-[var(--color-text-tertiary)] mb-[8px] px-[2px]">
+          Underwriting Breakdown
+        </h3>
+        <div className="overflow-hidden rounded-[12px] bg-[var(--color-surface)] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_0_0_0.5px_rgba(0,0,0,0.03)]">
+          {/* Header */}
+          <div className="grid grid-cols-4 gap-[4px] px-[12px] py-[8px] bg-[var(--color-fill-quaternary)]">
+            {["Quarter", "Premiums", "Losses", "Expenses"].map((h) => (
+              <span key={h} className="text-[10px] font-semibold tracking-[0.03em] uppercase text-[var(--color-text-tertiary)] text-center">
+                {h}
+              </span>
+            ))}
+          </div>
+          {/* Rows */}
+          {ratios.map((r, idx) => (
+            <div
+              key={r.fiscalDateEnding}
+              className={cn(
+                "grid grid-cols-4 gap-[4px] px-[12px] py-[10px]",
+                idx < ratios.length - 1 && "border-b border-[var(--color-separator-light)]"
+              )}
+            >
+              <span className="text-[13px] font-medium text-[var(--color-text-primary)] text-center">
+                {fmtQuarter(r.fiscalDateEnding)}
+              </span>
+              <span className="text-[12px] tabular-nums text-[var(--color-text-secondary)] text-center">
+                {fmt(r.netPremiumsEarned, { prefix: "$", compact: true })}
+              </span>
+              <span className="text-[12px] tabular-nums text-[var(--color-text-secondary)] text-center">
+                {fmt(r.incurredLosses, { prefix: "$", compact: true })}
+              </span>
+              <span className="text-[12px] tabular-nums text-[var(--color-text-secondary)] text-center">
+                {fmt(r.underwritingExpenses, { prefix: "$", compact: true })}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Methodology note */}
+      <div className="flex items-start gap-[8px] px-[14px] py-[10px] rounded-[10px] bg-[var(--color-fill-quaternary)]">
+        <AlertCircle className="h-[14px] w-[14px] text-[var(--color-text-quaternary)] mt-[1px] shrink-0" strokeWidth={1.8} />
+        <p className="text-[11px] leading-[1.5] text-[var(--color-text-quaternary)]">
+          Ratios are computed from SEC XBRL filings. Loss Ratio = Incurred Losses / Net Premiums Earned. Expense Ratio = (Underwriting + Acquisition Costs) / Net Premiums Earned. Combined Ratio = Loss + Expense. Below 100% indicates underwriting profit.
+        </p>
+      </div>
     </div>
   )
 }
@@ -1211,6 +1563,9 @@ export function EarningsDetailPage() {
 
         {/* Tab Content */}
         {activeTab === "overview" && <OverviewTab bundle={bundle} />}
+        {activeTab === "underwriting" && bundle.insuranceRatios && (
+          <UnderwritingTab ratios={bundle.insuranceRatios} />
+        )}
         {activeTab === "financials" && <FinancialsTab bundle={bundle} />}
         {activeTab === "filings" && <FilingsTab filings={bundle.filings} />}
         {activeTab === "insights" && (

@@ -89,4 +89,5 @@ export {
   xbrlGetQuarterlyIncome,
   xbrlGetQuarterlyBalance,
   xbrlGetEntityName,
+  xbrlGetInsuranceRatios,
 } from "./sec-xbrl.js";

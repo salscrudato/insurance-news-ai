@@ -243,7 +243,7 @@ export async function invalidateTickerCache(ticker: string): Promise<void> {
     `filings:${sym}`, `bundle:${sym}`,
     `av-profile:${sym}`, `av-earnings:${sym}`, `av-income:${sym}`,
     `av-balance:${sym}`, `av-cashflow:${sym}`, `av-quote:${sym}`,
-    `xbrl-earnings:${sym}`, `xbrl-income:${sym}`, `xbrl-balance:${sym}`,
+    `xbrl-earnings:${sym}`, `xbrl-income:${sym}`, `xbrl-balance:${sym}`, `xbrl-ratios:${sym}`,
   ];
 
   const batch = db.batch();

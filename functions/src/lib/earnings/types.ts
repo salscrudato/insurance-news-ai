@@ -145,6 +145,26 @@ export interface CompanySearchResult {
 }
 
 // ============================================================================
+// Insurance Ratios (computed from SEC XBRL data)
+// ============================================================================
+
+export interface InsuranceRatios {
+  fiscalDateEnding: string;
+  /** Net premiums earned */
+  netPremiumsEarned: number | null;
+  /** Incurred losses and LAE */
+  incurredLosses: number | null;
+  /** Underwriting / acquisition expenses */
+  underwritingExpenses: number | null;
+  /** Loss Ratio = Incurred Losses / Net Premiums Earned */
+  lossRatio: number | null;
+  /** Expense Ratio = Underwriting Expenses / Net Premiums Earned */
+  expenseRatio: number | null;
+  /** Combined Ratio = Loss Ratio + Expense Ratio */
+  combinedRatio: number | null;
+}
+
+// ============================================================================
 // Earnings Bundle (full payload for detail page)
 // ============================================================================
 
@@ -160,6 +180,8 @@ export interface EarningsBundle {
     balance: BalanceSheet[];
     cashflow: CashFlowStatement[];
   };
+  /** Insurance-specific underwriting ratios (null for non-insurers) */
+  insuranceRatios: InsuranceRatios[] | null;
   filings: Filing[] | null;
   /** ISO timestamp of when this bundle was assembled */
   updatedAt: string;
@@ -172,6 +194,7 @@ export interface EarningsBundle {
     profile?: "alpha-vantage" | "yahoo" | "none";
     quote?: "yahoo" | "alpha-vantage" | "none";
     filings?: "sec-edgar" | "none";
+    insuranceRatios?: "sec-xbrl" | "none";
   };
 }
 

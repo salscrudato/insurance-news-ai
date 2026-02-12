@@ -15,7 +15,7 @@
  */
 
 import { tickerToCik } from "./sec-edgar.js";
-import type { QuarterlyEarning, IncomeStatement, BalanceSheet } from "./types.js";
+import type { QuarterlyEarning, IncomeStatement, BalanceSheet, InsuranceRatios } from "./types.js";
 
 const XBRL_BASE = "https://data.sec.gov/api/xbrl/companyfacts";
 const SEC_USER_AGENT = "InsuranceBrief/1.0 (support@theinsurancebrief.com)";
@@ -296,4 +296,122 @@ export async function xbrlGetQuarterlyBalance(
     goodwill: null,
     intangibleAssets: null,
   }));
+}
+
+// ============================================================================
+// Public API: Insurance Underwriting Ratios
+// ============================================================================
+
+/**
+ * Compute quarterly insurance underwriting ratios from SEC XBRL data.
+ *
+ * Returns null for non-insurance companies (no premium data).
+ * Uses authoritative filed data — not estimated or modeled.
+ *
+ * Concepts tried (in order of specificity):
+ *  Premiums: PremiumsEarnedNet, PremiumsEarnedNetPropertyAndCasualty
+ *  Losses:   PolicyholderBenefitsAndClaimsIncurredNet,
+ *            IncurredClaimsPropertyCasualtyAndLiability
+ *  Expenses: OtherUnderwritingExpense + DeferredPolicyAcquisitionCostAmortizationExpense,
+ *            or SellingGeneralAndAdministrativeExpense + DPAC as fallback
+ */
+export async function xbrlGetInsuranceRatios(
+  ticker: string,
+  limit = 8
+): Promise<InsuranceRatios[] | null> {
+  const data = await fetchCompanyFacts(ticker);
+  if (!data) return null;
+
+  const facts = (data.facts ?? {}) as Record<string, unknown>;
+
+  // Net Premiums Earned — the denominator for all ratios
+  const premiumEntries = getFirstAvailable(facts, [
+    "PremiumsEarnedNet",
+    "PremiumsEarnedNetPropertyAndCasualty",
+  ], "USD");
+
+  // No premium data means this is not an insurance company
+  if (premiumEntries.length === 0) return null;
+
+  // Incurred losses
+  const lossEntries = getFirstAvailable(facts, [
+    "PolicyholderBenefitsAndClaimsIncurredNet",
+    "IncurredClaimsPropertyCasualtyAndLiability",
+  ], "USD");
+
+  // Underwriting expenses — try multiple combinations
+  // Different insurers report expenses under different XBRL concepts
+  const uwExpEntries = getFirstAvailable(facts, [
+    "OtherUnderwritingExpense",
+  ], "USD");
+  const dpacEntries = getFirstAvailable(facts, [
+    "DeferredPolicyAcquisitionCostAmortizationExpense",
+  ], "USD");
+  const sgaEntries = getFirstAvailable(facts, [
+    "SellingGeneralAndAdministrativeExpense",
+  ], "USD");
+  // Additional fallback: some insurers (e.g. WRB) report non-loss operating costs here
+  const otherOpExpEntries = getFirstAvailable(facts, [
+    "OtherCostAndExpenseOperating",
+  ], "USD");
+
+  // Build maps for joining on quarter end date
+  const premMap = new Map(premiumEntries.map((e) => [e.end, e.val]));
+  const lossMap = new Map(lossEntries.map((e) => [e.end, e.val]));
+  const uwExpMap = new Map(uwExpEntries.map((e) => [e.end, e.val]));
+  const dpacMap = new Map(dpacEntries.map((e) => [e.end, e.val]));
+  const sgaMap = new Map(sgaEntries.map((e) => [e.end, e.val]));
+  const otherOpExpMap = new Map(otherOpExpEntries.map((e) => [e.end, e.val]));
+
+  // Use premium dates as the authoritative timeline
+  const sortedDates = premiumEntries.map((e) => e.end).slice(0, limit);
+
+  return sortedDates.map((date): InsuranceRatios => {
+    const prem = premMap.get(date) ?? null;
+    const losses = lossMap.get(date) ?? null;
+
+    // Compute underwriting expenses using a priority cascade:
+    // 1. OtherUnderwritingExpense + DPAC (most precise, e.g. PGR)
+    // 2. OtherUnderwritingExpense alone (if DPAC is rolled into it)
+    // 3. SGA + DPAC (e.g. TRV, HIG)
+    // 4. OtherCostAndExpenseOperating when it represents a meaningful share of
+    //    premiums (>15%), indicating it's the primary non-loss cost concept (WRB)
+    // 5. DPAC alone (minimum view of expense ratio, e.g. CINF)
+    let uwExp: number | null = null;
+    const uw = uwExpMap.get(date);
+    const dpac = dpacMap.get(date);
+    const sga = sgaMap.get(date);
+    const otherOp = otherOpExpMap.get(date);
+
+    if (uw != null && dpac != null) {
+      uwExp = uw + dpac;
+    } else if (uw != null) {
+      uwExp = uw;
+    } else if (sga != null && dpac != null) {
+      uwExp = sga + dpac;
+    } else if (otherOp != null && prem && otherOp / prem > 0.15) {
+      // OtherCostAndExpenseOperating is the primary non-loss expense line
+      // (e.g. WRB reports ~30% expense ratio this way)
+      uwExp = otherOp;
+    } else if (dpac != null) {
+      uwExp = dpac;
+    }
+
+    // Compute ratios (as decimals, e.g. 0.65 = 65%)
+    const lossRatio = (prem && losses != null) ? losses / prem : null;
+    const expenseRatio = (prem && uwExp != null) ? uwExp / prem : null;
+    const combinedRatio = (lossRatio != null && expenseRatio != null)
+      ? lossRatio + expenseRatio
+      : null;
+
+    return {
+      fiscalDateEnding: date,
+      netPremiumsEarned: prem,
+      incurredLosses: losses,
+      underwritingExpenses: uwExp,
+      lossRatio,
+      expenseRatio,
+      combinedRatio,
+    };
+  });
 }
