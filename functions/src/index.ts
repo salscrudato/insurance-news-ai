@@ -3901,6 +3901,7 @@ const EARNINGS_AI_SCHEMA = {
         roe: { type: "string" as const },
         pb: { type: "string" as const },
       },
+      required: ["combinedRatio", "lossRatio", "expenseRatio", "catLosses", "reserveDev", "nwp", "bookValuePerShare", "roe", "pb"] as const,
       additionalProperties: false as const,
     },
     sources: {
@@ -3952,11 +3953,19 @@ export const getEarningsAIInsights = onCall<{ ticker: string; periodKey: string 
 
     console.log(`[getEarningsAIInsights] Generating for ${sym}:${periodKey}`);
 
+    // Use cached data from prior bundle calls (don't re-fetch from AV)
     const [profile, earnings, income, filings] = await Promise.all([
-      getOrFetch(`profile:${sym}`, CACHE_TTL.profile, () => getCompanyOverview(sym)),
-      getOrFetch(`earnings:${sym}`, CACHE_TTL.earnings, () => getEarnings(sym)),
-      getOrFetch(`income:${sym}`, CACHE_TTL.financials, () => getIncomeStatements(sym)),
-      getOrFetch(`filings:${sym}`, CACHE_TTL.filings, () => getRecentFilings(sym)),
+      getCached<CompanyProfile>(`av-profile:${sym}`, CACHE_TTL.profile * 2)
+        .then((p) => p ?? getCached<CompanyProfile>(`profile:${sym}`, CACHE_TTL.profile * 2))
+        .then((p) => p ?? ({ name: sym, ticker: sym, exchange: "", sector: "", industry: "" } as CompanyProfile)),
+      getCached<EarningsData>(`av-earnings:${sym}`, CACHE_TTL.earnings * 2)
+        .then((e) => e ?? getCached<EarningsData>(`earnings:${sym}`, CACHE_TTL.earnings * 2))
+        .then((e) => e ?? { annualEarnings: [], quarterlyEarnings: [] } as EarningsData),
+      getCached<IncomeStatement[]>(`xbrl-income:${sym}`, CACHE_TTL.financials * 2)
+        .then((i) => i ?? getCached<IncomeStatement[]>(`av-income:${sym}`, CACHE_TTL.financials * 2))
+        .then((i) => i ?? ([] as IncomeStatement[])),
+      getCached<import("./lib/earnings/types.js").Filing[]>(`filings:${sym}`, CACHE_TTL.filings * 2)
+        .then((f) => f ?? ([] as import("./lib/earnings/types.js").Filing[])),
     ]);
 
     const contextParts: string[] = [
@@ -3987,16 +3996,19 @@ export const getEarningsAIInsights = onCall<{ ticker: string; periodKey: string 
 
     try {
       const openai = getOpenAIClient();
-      const response = await openai.responses.create({
-        model: AI_MODEL,
-        input: [
-          { role: "system", content: EARNINGS_AI_SYSTEM },
-          { role: "user", content: `Analyze ${sym} for period ${periodKey}:\n\n${contextParts.join("\n")}\n\nProvide structured earnings insights.` },
-        ],
-        text: {
-          format: { type: "json_schema", name: "earnings_insights", schema: EARNINGS_AI_SCHEMA, strict: true },
-        },
-      });
+      const response = await withRetry(
+        () => openai.responses.create({
+          model: AI_MODEL,
+          input: [
+            { role: "system", content: EARNINGS_AI_SYSTEM },
+            { role: "user", content: `Analyze ${sym} for period ${periodKey}:\n\n${contextParts.join("\n")}\n\nProvide structured earnings insights.` },
+          ],
+          text: {
+            format: { type: "json_schema", name: "earnings_insights", schema: EARNINGS_AI_SCHEMA, strict: true },
+          },
+        }),
+        { maxRetries: 2, label: "AI Insights" }
+      );
 
       const parsed = JSON.parse(response.output_text) as Omit<EarningsAIInsights, "generatedAt" | "periodKey">;
       if (sourceUrls.length > 0 && (!parsed.sources || parsed.sources.length === 0)) {

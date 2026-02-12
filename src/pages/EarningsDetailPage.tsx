@@ -256,7 +256,7 @@ function OverviewTab({ bundle }: { bundle: EarningsBundle }) {
               ${quote.price.toFixed(2)}
             </span>
             <span className="block text-[11px] text-[var(--color-text-quaternary)] mt-[1px]">
-              {quote.latestTradingDay}
+              {fmtDate(quote.latestTradingDay)}
             </span>
           </div>
           <div
@@ -338,14 +338,9 @@ function OverviewTab({ bundle }: { bundle: EarningsBundle }) {
                 <span className="text-[11px] font-medium tracking-[0.02em] text-[var(--color-text-tertiary)]">
                   EPS Trend
                 </span>
-                {epsData.length > 1 && (
-                  <span className={cn(
-                    "text-[11px] font-semibold",
-                    epsData[epsData.length - 1] >= epsData[0] ? "text-[var(--color-success)]" : "text-[var(--color-destructive)]"
-                  )}>
-                    {epsData[epsData.length - 1] >= epsData[0] ? "+" : ""}{((epsData[epsData.length - 1] - epsData[0]) / Math.abs(epsData[0] || 1) * 100).toFixed(0)}%
-                  </span>
-                )}
+                <span className="text-[11px] font-semibold tabular-nums text-[var(--color-text-secondary)]">
+                  ${epsData[epsData.length - 1].toFixed(2)}
+                </span>
               </div>
               <Sparkline data={epsData} color="var(--color-accent)" width={140} height={32} />
             </div>
@@ -356,14 +351,9 @@ function OverviewTab({ bundle }: { bundle: EarningsBundle }) {
                 <span className="text-[11px] font-medium tracking-[0.02em] text-[var(--color-text-tertiary)]">
                   Revenue Trend
                 </span>
-                {revenueData.length > 1 && (
-                  <span className={cn(
-                    "text-[11px] font-semibold",
-                    revenueData[revenueData.length - 1] >= revenueData[0] ? "text-[var(--color-success)]" : "text-[var(--color-destructive)]"
-                  )}>
-                    {revenueData[revenueData.length - 1] >= revenueData[0] ? "+" : ""}{((revenueData[revenueData.length - 1] - revenueData[0]) / Math.abs(revenueData[0] || 1) * 100).toFixed(0)}%
-                  </span>
-                )}
+                <span className="text-[11px] font-semibold tabular-nums text-[var(--color-text-secondary)]">
+                  {fmt(revenueData[revenueData.length - 1], { prefix: "$", compact: true })}
+                </span>
               </div>
               <Sparkline data={revenueData} color="var(--color-success)" width={140} height={32} />
             </div>
@@ -718,8 +708,58 @@ function AIInsightsTab({
     data: insights,
     isLoading,
     isFetching,
+    isError,
     refetch,
   } = useEarningsAIInsights(ticker, pk)
+
+  if (isError && !insights) {
+    return (
+      <div className="space-y-[16px]">
+        <div className="rounded-[12px] bg-[var(--color-surface)] px-[16px] py-[24px] text-center shadow-[0_1px_2px_rgba(0,0,0,0.04),0_0_0_0.5px_rgba(0,0,0,0.03)]">
+          <div className="flex h-[48px] w-[48px] items-center justify-center rounded-[14px] bg-[var(--color-destructive-soft)] mx-auto mb-[12px]">
+            <AlertCircle className="h-[22px] w-[22px] text-[var(--color-destructive)]" strokeWidth={1.5} />
+          </div>
+          <p className="text-[15px] font-medium text-[var(--color-text-primary)] mb-[4px]">
+            Unable to Generate Insights
+          </p>
+          <p className="text-[13px] text-[var(--color-text-secondary)] mb-[16px] max-w-[260px] mx-auto">
+            Something went wrong. Please try again.
+          </p>
+          <button
+            onClick={() => refetch()}
+            className={cn(
+              "inline-flex items-center gap-[6px] px-[20px] py-[10px] rounded-[10px]",
+              "bg-[var(--color-accent)] text-white text-[14px] font-semibold tracking-[-0.2px]",
+              "transition-all duration-150",
+              "hover:bg-[var(--color-accent-hover)] active:scale-[0.97]",
+            )}
+          >
+            <Sparkles className="h-[14px] w-[14px]" strokeWidth={2} />
+            Try Again
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (isLoading || isFetching) {
+    return (
+      <div className="space-y-[16px]">
+        <div className="rounded-[12px] bg-[var(--color-surface)] px-[16px] py-[24px] text-center shadow-[0_1px_2px_rgba(0,0,0,0.04),0_0_0_0.5px_rgba(0,0,0,0.03)]">
+          <div className="flex h-[48px] w-[48px] items-center justify-center rounded-[14px] bg-[var(--color-accent-soft)] mx-auto mb-[12px] animate-pulse">
+            <Sparkles className="h-[22px] w-[22px] text-[var(--color-accent)]" strokeWidth={1.5} />
+          </div>
+          <p className="text-[15px] font-medium text-[var(--color-text-primary)] mb-[4px]">
+            Analyzing Earnings...
+          </p>
+          <p className="text-[13px] text-[var(--color-text-tertiary)]">
+            This usually takes a few seconds
+          </p>
+        </div>
+        <InsightsSkeleton />
+      </div>
+    )
+  }
 
   if (!insights && !isLoading && !isFetching) {
     return (
@@ -749,10 +789,6 @@ function AIInsightsTab({
         </div>
       </div>
     )
-  }
-
-  if (isLoading || isFetching) {
-    return <InsightsSkeleton />
   }
 
   if (!insights) return null
@@ -1113,22 +1149,22 @@ export function EarningsDetailPage() {
             <ArrowLeft className="h-[16px] w-[16px] text-[var(--color-text-secondary)]" strokeWidth={2} />
           </button>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-[8px]">
-              <h1 className="text-[22px] font-bold tracking-[-0.4px] text-[var(--color-text-primary)] truncate">
-                {profile.name}
-              </h1>
-            </div>
-            <div className="flex items-center gap-[6px] mt-[2px]">
+            <h1 className="text-[20px] font-bold tracking-[-0.4px] text-[var(--color-text-primary)] leading-[1.2]">
+              {profile.name}
+            </h1>
+            <div className="flex items-center gap-[6px] mt-[3px] flex-wrap">
               <span className="text-[12px] font-semibold tracking-[-0.02em] text-[var(--color-accent)] px-[6px] py-[1px] rounded-[4px] bg-[var(--color-accent-soft)]">
                 {profile.ticker}
               </span>
-              <span className="text-[12px] text-[var(--color-text-tertiary)]">
-                {profile.exchange}
-              </span>
+              {profile.exchange && (
+                <span className="text-[12px] text-[var(--color-text-tertiary)]">
+                  {profile.exchange}
+                </span>
+              )}
               {profile.sector && (
                 <>
                   <span className="text-[10px] text-[var(--color-text-quaternary)]">·</span>
-                  <span className="text-[12px] text-[var(--color-text-tertiary)] truncate">
+                  <span className="text-[12px] text-[var(--color-text-tertiary)]">
                     {profile.sector}
                   </span>
                 </>
@@ -1155,7 +1191,7 @@ export function EarningsDetailPage() {
         </div>
 
         {/* Tab Bar */}
-        <div className="flex gap-[4px] mb-[20px] overflow-x-auto pb-[2px] -mx-[4px] px-[4px]">
+        <div className="flex gap-[4px] mb-[20px] overflow-x-auto pb-[2px] -mx-[4px] px-[4px] scrollbar-none" style={{ WebkitOverflowScrolling: "touch", msOverflowStyle: "none", scrollbarWidth: "none" }}>
           {availableTabs.map((tab) => (
             <button
               key={tab.id}
