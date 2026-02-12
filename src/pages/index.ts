@@ -6,4 +6,6 @@ export { AskPage } from "./AskPage"
 export { TermsPage } from "./TermsPage"
 export { PrivacyPage } from "./PrivacyPage"
 export { AuthPage } from "./AuthPage"
+export { EarningsPage } from "./EarningsPage"
+export { EarningsDetailPage } from "./EarningsDetailPage"
 

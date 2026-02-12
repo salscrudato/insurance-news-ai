@@ -16,6 +16,8 @@ import {
   TermsPage,
   PrivacyPage,
   AuthPage,
+  EarningsPage,
+  EarningsDetailPage,
 } from "@/pages"
 
 /**
@@ -99,6 +101,8 @@ function AppRoutes() {
         <Route path="/feed" element={<FeedPage />} />
         <Route path="/pulse" element={<PulsePage />} />
         <Route path="/ask" element={<AskPage />} />
+        <Route path="/earnings" element={<EarningsPage />} />
+        <Route path="/earnings/:ticker" element={<EarningsDetailPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
 

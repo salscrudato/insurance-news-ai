@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom"
-import { Newspaper, LayoutList, Settings, ChevronRight, Sparkles, BarChart3, type LucideIcon } from "lucide-react"
+import { Newspaper, LayoutList, Settings, ChevronRight, Sparkles, BarChart3, TrendingUp, type LucideIcon } from "lucide-react"
 import { AppLogo } from "@/components/ui/app-logo"
 import {
   Sheet,
@@ -29,6 +29,7 @@ const primaryNavItems: NavItem[] = [
   { path: "/feed", label: "Feed", icon: LayoutList, description: "All articles" },
   { path: "/pulse", label: "Pulse", icon: BarChart3, description: "Trending signals" },
   { path: "/ask", label: "Ask AI", icon: Sparkles, description: "Chat with sources" },
+  { path: "/earnings", label: "Earnings", icon: TrendingUp, description: "Financials & calls" },
 ]
 
 const secondaryNavItems: NavItem[] = [
@@ -38,6 +39,7 @@ const secondaryNavItems: NavItem[] = [
 const allNavItems = [...primaryNavItems, ...secondaryNavItems]
 
 function getPageTitle(pathname: string): string {
+  if (pathname.startsWith("/earnings/")) return "Earnings"
   const item = allNavItems.find((nav) => nav.path === pathname)
   return item?.label ?? "Today"
 }
@@ -267,7 +269,7 @@ export function MainLayout() {
         <main className="flex-1 flex flex-col overflow-hidden">
           <div className="safe-area-padding-x flex-1 flex flex-col overflow-hidden">
             {/* Full-bleed layout for /ask and /feed routes (no title, no padding) */}
-            {location.pathname === "/ask" || location.pathname === "/feed" ? (
+            {location.pathname === "/ask" || location.pathname === "/feed" || location.pathname.startsWith("/earnings/") ? (
               <div className="flex-1 flex flex-col overflow-hidden">
                 <Outlet />
               </div>
