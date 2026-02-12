@@ -255,6 +255,7 @@ export interface UserPreferences {
 
 // ============================================================================
 // Signals Cache Collection: signals/{dateKey_wWindowDays}
+// (Legacy — retained for backward compatibility with cached responses)
 // ============================================================================
 
 export interface SignalItemDoc {
@@ -280,6 +281,107 @@ export interface SignalsCacheDoc {
     prevDates: string[];
     totalTopics: number;
   };
+  createdAt: Timestamp;
+}
+
+// ============================================================================
+// Pulse Snapshots Collection: pulseSnapshots/{windowDays}
+// ============================================================================
+
+/** Topic type classification for Industry Pulse */
+export type PulseTopicType =
+  | "carrier"
+  | "broker"
+  | "reinsurer"
+  | "lob"
+  | "peril"
+  | "regulation"
+  | "capital"
+  | "mna"
+  | "people"
+  | "technology";
+
+/** A single topic within a pulse snapshot */
+export interface PulseTopicDoc {
+  /** Canonical key (normalized, stable across briefs) */
+  key: string;
+  /** Human-readable display name */
+  displayName: string;
+  /** Classification type */
+  type: PulseTopicType;
+  /** Total mention count in the recent window */
+  mentions: number;
+  /** Baseline mention count in the prior equivalent window */
+  baselineMentions: number;
+  /** mentions - baselineMentions */
+  momentum: number;
+  /** Number of unique days the topic appeared */
+  daysPresent: number;
+  /** Number of unique sources associated with the topic */
+  uniqueSources: number;
+  /** Array[windowDays] of daily mention counts (oldest first) */
+  trendSeries: number[];
+}
+
+/** A driver reference cited in the pulse narrative */
+export interface PulseNarrativeDriverDoc {
+  /** Article ID (if resolvable) */
+  articleId?: string;
+  /** Source publication name */
+  source: string;
+  /** Article or story title */
+  title: string;
+  /** URL to the original article */
+  url: string;
+}
+
+/** Structured market narrative attached to a pulse snapshot */
+export interface PulseNarrativeDoc {
+  /** Single-line executive headline */
+  headline: string;
+  /** 3–5 grounded market insight bullets */
+  bullets: string[];
+  /** 2–4 overarching theme labels */
+  themes: string[];
+  /** Concrete driver references backing the narrative */
+  drivers: PulseNarrativeDriverDoc[];
+  /** Count of unique sources referenced */
+  sourcesUsed: number;
+}
+
+/** Pulse snapshot document stored at pulseSnapshots/{windowDays} */
+export interface PulseSnapshotDoc {
+  /** Window size (7, 14, 30, etc.) */
+  windowDays: number;
+  /** Reference date (end of recent window) */
+  dateKey: string;
+  /** When this snapshot was generated */
+  generatedAt: Timestamp;
+  /** Total unique canonical topics across both windows */
+  totalTopics: number;
+  /** Topics with positive momentum (sorted by momentum desc) */
+  rising: PulseTopicDoc[];
+  /** Topics with negative momentum (sorted by momentum asc) */
+  falling: PulseTopicDoc[];
+  /** Topics with zero momentum but present in recent window */
+  stable: PulseTopicDoc[];
+  /** AI-generated structured market narrative (generated alongside snapshot) */
+  narrative?: PulseNarrativeDoc | null;
+}
+
+// ============================================================================
+// Watchlist Subcollection: users/{uid}/watchlist/{topicKey}
+// ============================================================================
+
+/** A pinned topic in a user's watchlist */
+export interface WatchlistTopicDoc {
+  /** Canonical topic key (same as document ID) */
+  key: string;
+  /** Human-readable display name at time of pinning */
+  displayName: string;
+  /** Topic classification type at time of pinning */
+  type: PulseTopicType;
+  /** When the user pinned this topic */
   createdAt: Timestamp;
 }
 

@@ -254,7 +254,7 @@ export interface UserPreferences {
 }
 
 // ============================================================================
-// Signals (Industry Pulse) — Response types
+// Signals (Industry Pulse) — Legacy response types
 // ============================================================================
 
 export interface SignalItem {
@@ -289,6 +289,177 @@ export interface PulseSignalsResponse {
   falling: SignalItem[];
   persistent: SignalItem[];
   meta: SignalsMeta;
+}
+
+// ============================================================================
+// Pulse Snapshots — Deterministic response types
+// ============================================================================
+
+/** Topic type classification for Industry Pulse */
+export type PulseTopicType =
+  | "carrier"
+  | "broker"
+  | "reinsurer"
+  | "lob"
+  | "peril"
+  | "regulation"
+  | "capital"
+  | "mna"
+  | "people"
+  | "technology";
+
+/** A single topic in a pulse snapshot */
+export interface PulseTopic {
+  /** Canonical key (normalized, stable across briefs) */
+  key: string;
+  /** Human-readable display name */
+  displayName: string;
+  /** Classification type */
+  type: PulseTopicType;
+  /** Total mention count in the recent window */
+  mentions: number;
+  /** Baseline mention count in the prior equivalent window */
+  baselineMentions: number;
+  /** mentions - baselineMentions */
+  momentum: number;
+  /** Number of unique days the topic appeared */
+  daysPresent: number;
+  /** Number of unique sources associated with the topic */
+  uniqueSources: number;
+  /** Array[windowDays] of daily mention counts (oldest first) */
+  trendSeries: number[];
+}
+
+/** A driver reference cited in the pulse narrative */
+export interface PulseNarrativeDriver {
+  /** Article ID (if resolvable) */
+  articleId?: string;
+  /** Source publication name */
+  source: string;
+  /** Article or story title */
+  title: string;
+  /** URL to the original article */
+  url: string;
+}
+
+/** Structured market narrative for a pulse snapshot */
+export interface PulseNarrative {
+  /** Single-line executive headline */
+  headline: string;
+  /** 3–5 grounded market insight bullets */
+  bullets: string[];
+  /** 2–4 overarching theme labels */
+  themes: string[];
+  /** Concrete driver references backing the narrative */
+  drivers: PulseNarrativeDriver[];
+  /** Count of unique sources referenced */
+  sourcesUsed: number;
+}
+
+/** Pulse snapshot response from getPulseSnapshot callable */
+export interface PulseSnapshotResponse {
+  windowDays: number;
+  dateKey: string;
+  generatedAt: string; // ISO string
+  totalTopics: number;
+  rising: PulseTopic[];
+  falling: PulseTopic[];
+  stable: PulseTopic[];
+  /** Structured market narrative (null if generation failed or unavailable) */
+  narrative: PulseNarrative | null;
+}
+
+// ============================================================================
+// Pulse Topic Drilldown — getPulseTopicDetail response types
+// ============================================================================
+
+/** A driver article backing a topic's mentions */
+export interface PulseTopicDriver {
+  /** Firestore article document ID */
+  articleId: string;
+  /** Source publication name */
+  source: string;
+  /** Article headline */
+  title: string;
+  /** URL to the original article */
+  url: string;
+  /** When the article was published (ISO string) */
+  publishedAt: string;
+}
+
+/** Response from getPulseTopicDetail callable */
+export interface PulseTopicDetailResponse {
+  /** Canonical topic key */
+  key: string;
+  /** Human-readable display name */
+  displayName: string;
+  /** Classification type */
+  type: PulseTopicType;
+  /** Total mention count in the recent window */
+  mentions: number;
+  /** Baseline mention count in the prior equivalent window */
+  baselineMentions: number;
+  /** mentions - baselineMentions */
+  momentum: number;
+  /** Number of unique days the topic appeared */
+  daysPresent: number;
+  /** Number of unique sources associated with the topic */
+  uniqueSources: number;
+  /** Array[windowDays] of daily mention counts (oldest first) */
+  trendSeries: number[];
+  /** Top N articles contributing to this topic's mentions */
+  drivers: PulseTopicDriver[];
+}
+
+// ============================================================================
+// Watchlist — toggleWatchlistTopic / getWatchlistTopics response types
+// ============================================================================
+
+/** A pinned topic in the user's watchlist (stored at users/{uid}/watchlist/{topicKey}) */
+export interface WatchlistTopic {
+  /** Canonical topic key */
+  key: string;
+  /** Human-readable display name */
+  displayName: string;
+  /** Classification type */
+  type: PulseTopicType;
+  /** When the user pinned this topic (ISO string) */
+  createdAt: string;
+}
+
+/** Watchlist topic enriched with current snapshot metrics */
+export interface WatchlistTopicEnriched {
+  /** Canonical topic key */
+  key: string;
+  /** Human-readable display name */
+  displayName: string;
+  /** Classification type */
+  type: PulseTopicType;
+  /** When the user pinned this topic (ISO string) */
+  createdAt: string;
+  /** Whether live snapshot metrics are available */
+  hasMetrics: boolean;
+  /** Current mention count (null if snapshot unavailable or topic absent) */
+  mentions: number | null;
+  /** Baseline mention count (null if unavailable) */
+  baselineMentions: number | null;
+  /** Current momentum (null if unavailable) */
+  momentum: number | null;
+  /** Days present in recent window (null if unavailable) */
+  daysPresent: number | null;
+  /** Unique sources (null if unavailable) */
+  uniqueSources: number | null;
+  /** Daily trend series (null if unavailable) */
+  trendSeries: number[] | null;
+}
+
+/** Response from getWatchlistTopics callable */
+export interface GetWatchlistTopicsResponse {
+  topics: WatchlistTopicEnriched[];
+  /** Window used for metric enrichment */
+  windowDays: number;
+  /** Whether a snapshot was available for enrichment */
+  snapshotAvailable: boolean;
 }
 
 // ============================================================================

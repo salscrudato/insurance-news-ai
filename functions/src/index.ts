@@ -19,6 +19,12 @@
  * - runEmbeddingsBackfill: Scheduled embedding backfill
  * - answerQuestionRag: RAG chat (callable)
  * - answerQuestionRagStream: RAG chat (SSE streaming)
+ * - getPulseSignals: Legacy AI-enhanced pulse signals (callable)
+ * - runDailyPulseSnapshots: Scheduled pulse generation + narrative (daily, 1:30 AM ET)
+ * - getPulseSnapshot: On-demand pulse snapshot + narrative (callable, 24h cache)
+ * - getPulseTopicDetail: Topic drilldown with driver articles (callable)
+ * - toggleWatchlistTopic: Pin/unpin a pulse topic (callable, auth required)
+ * - getWatchlistTopics: Enriched watchlist retrieval (callable, auth required)
  * - deleteAccount: Account + data deletion (App Store 5.1.1(v))
  */
 
@@ -65,10 +71,13 @@ import {
 import {
   computeSignals,
   dateRange,
+  computePulseSnapshot,
+  canonicalTopicKey,
   type SignalItem,
   type BriefTopicsInput,
+  type BriefInput,
 } from "./lib/signals/index.js";
-import type { Article, Brief } from "./types/firestore.js";
+import type { Article, Brief, PulseSnapshotDoc, PulseNarrativeDoc } from "./types/firestore.js";
 
 // Initialize Firebase Admin
 if (getApps().length === 0) {
@@ -1058,6 +1067,8 @@ interface GetArticlesData {
   sourceIds?: string[];
   limit?: number;
   startAfterPublishedAt?: string; // ISO date string for pagination
+  topicKey?: string; // Canonical topic key for deep-link filtering
+  windowDays?: number; // Pulse window for topic resolution (default: 7, used only with topicKey)
 }
 
 /**
@@ -1084,6 +1095,8 @@ export const getArticles = onCall<GetArticlesData>(
       sourceIds,
       limit: requestLimit = 20,
       startAfterPublishedAt,
+      topicKey,
+      windowDays: rawWindow,
     } = request.data || {};
 
     // Validate timeWindow
@@ -1137,11 +1150,213 @@ export const getArticles = onCall<GetArticlesData>(
       }
     }
 
+    // Limit (clamped 1-50)
+    const safeLimit = Math.max(1, Math.min(requestLimit, 50));
+
+    // ================================================================
+    // Topic-filtered path: resolve article IDs from brief metadata,
+    // then batch-fetch + filter in-memory on the small result set.
+    // ================================================================
+    if (topicKey && typeof topicKey === "string" && topicKey.trim().length > 0) {
+      const normalizedKey = topicKey.trim().toLowerCase();
+      const windowDays = Math.max(1, Math.min(Number(rawWindow) || 7, 30));
+
+      console.log("[getArticles] Topic-filtered mode", {
+        topicKey: normalizedKey,
+        windowDays,
+        category,
+        timeWindow,
+        sourceCount: sourceIds?.length ?? "all",
+        limit: safeLimit,
+        hasCursor: !!startAfterPublishedAt,
+      });
+
+      // ---- Step 1: Resolve article IDs from briefs in the window ----
+      // Uses the same brief-derived approach as getPulseTopicDetail.
+      // Only reads topics + sourceArticleIds (field-masked).
+      const snapshotDocId = String(windowDays);
+      const snapshotRef = db.collection("pulseSnapshots").doc(snapshotDocId);
+      const snapshotDoc = await snapshotRef.get();
+
+      // Determine the dateKey from the snapshot (or fall back to today)
+      let dateKey: string;
+      if (snapshotDoc.exists) {
+        const snap = snapshotDoc.data() as PulseSnapshotDoc;
+        dateKey = snap.dateKey;
+      } else {
+        dateKey = getTodayDateET();
+      }
+
+      const recentDates = dateRange(dateKey, windowDays);
+      const uniqueDates = [...new Set(recentDates)];
+
+      const articleIdSet = new Set<string>();
+      const briefBatches: string[][] = [];
+
+      for (let i = 0; i < uniqueDates.length; i += 30) {
+        briefBatches.push(uniqueDates.slice(i, i + 30));
+      }
+
+      for (const batch of briefBatches) {
+        const refs = batch.map((d) => db.collection("briefs").doc(d));
+        if (refs.length === 0) continue;
+
+        const docs = await db.getAll(
+          ...refs,
+          { fieldMask: ["topics", "sourceArticleIds"] }
+        );
+
+        for (const doc of docs) {
+          if (!doc.exists) continue;
+          const data = doc.data() as Pick<Brief, "topics" | "sourceArticleIds">;
+          if (!data.topics || data.topics.length === 0) continue;
+
+          const briefHasTopic = data.topics.some(
+            (raw) => canonicalTopicKey(raw) === normalizedKey
+          );
+
+          if (briefHasTopic && data.sourceArticleIds) {
+            for (const aid of data.sourceArticleIds) {
+              articleIdSet.add(aid);
+            }
+          }
+        }
+      }
+
+      console.log(
+        `[getArticles] Topic "${normalizedKey}": resolved ${articleIdSet.size} article IDs from ${uniqueDates.length} brief dates`
+      );
+
+      // Graceful fallback: no matching articles
+      if (articleIdSet.size === 0) {
+        return { articles: [], hasMore: false, topicKey: normalizedKey };
+      }
+
+      // ---- Step 2: Batch-fetch article documents ----
+      const allArticleIds = [...articleIdSet];
+      const articleBatches: string[][] = [];
+      for (let i = 0; i < allArticleIds.length; i += 30) {
+        articleBatches.push(allArticleIds.slice(i, i + 30));
+      }
+
+      type ArticleResult = {
+        id: string;
+        sourceId: string;
+        sourceName: string;
+        title: string;
+        snippet: string;
+        url: string;
+        canonicalUrl: string;
+        guid: string | null;
+        imageUrl: string | null;
+        categories: string[];
+        publishedAt: string | null;
+        ingestedAt: string | null;
+        relevanceScore: number;
+        isRelevant: boolean;
+        ai: Article["ai"] | null;
+        _publishedAtMs: number; // internal for sorting/filtering
+      };
+
+      const allArticles: ArticleResult[] = [];
+
+      for (const batch of articleBatches) {
+        const refs = batch.map((id) => db.collection("articles").doc(id));
+        if (refs.length === 0) continue;
+
+        const docs = await db.getAll(...refs);
+
+        for (const doc of docs) {
+          if (!doc.exists) continue;
+          const data = doc.data() as Article;
+          const pubDate = data.publishedAt?.toDate?.() ?? null;
+
+          allArticles.push({
+            id: doc.id,
+            sourceId: data.sourceId,
+            sourceName: data.sourceName,
+            title: data.title,
+            snippet: data.snippet,
+            url: data.url,
+            canonicalUrl: data.canonicalUrl,
+            guid: data.guid,
+            imageUrl: data.imageUrl || null,
+            categories: data.categories || [],
+            publishedAt: pubDate?.toISOString() || null,
+            ingestedAt: data.ingestedAt?.toDate?.()?.toISOString() || null,
+            relevanceScore: data.relevanceScore,
+            isRelevant: data.isRelevant,
+            ai: data.ai || null,
+            _publishedAtMs: pubDate?.getTime() ?? 0,
+          });
+        }
+      }
+
+      // ---- Step 3: Apply filters in-memory on the bounded result set ----
+      let filtered = allArticles;
+
+      // Time window filter
+      if (timeWindow !== "all") {
+        const now = Date.now();
+        const cutoffMs =
+          timeWindow === "24h"
+            ? now - 24 * 60 * 60 * 1000
+            : now - 7 * 24 * 60 * 60 * 1000;
+        filtered = filtered.filter((a) => a._publishedAtMs >= cutoffMs);
+      }
+
+      // Category filter
+      if (category && category !== "all") {
+        filtered = filtered.filter((a) => a.categories.includes(category));
+      }
+
+      // Source filter
+      if (sourceIds && sourceIds.length > 0) {
+        const validSourceIds = new Set(
+          sourceIds.filter((id) => typeof id === "string" && id.trim() !== "")
+        );
+        if (validSourceIds.size > 0) {
+          filtered = filtered.filter((a) => validSourceIds.has(a.sourceId));
+        }
+      }
+
+      // Sort by publishedAt desc
+      filtered.sort((a, b) => b._publishedAtMs - a._publishedAtMs);
+
+      // Pagination cursor
+      if (startAfterPublishedAt) {
+        const cursorMs = new Date(startAfterPublishedAt).getTime();
+        const cursorIdx = filtered.findIndex((a) => a._publishedAtMs < cursorMs);
+        filtered = cursorIdx >= 0 ? filtered.slice(cursorIdx) : [];
+      }
+
+      // Apply limit
+      const page = filtered.slice(0, safeLimit);
+
+      // Strip internal sort field
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const articles = page.map(({ _publishedAtMs, ...rest }) => rest);
+
+      console.log(
+        `[getArticles] Topic "${normalizedKey}": returning ${articles.length} articles (${allArticles.length} resolved, ${filtered.length} after filters)`
+      );
+
+      return {
+        articles,
+        hasMore: filtered.length > safeLimit,
+        topicKey: normalizedKey,
+      };
+    }
+
+    // ================================================================
+    // Standard path: Firestore index-backed query (no topic filter)
+    // ================================================================
+
     console.log("[getArticles] Fetching articles", {
       category,
       timeWindow,
       sourceCount: sourceIds?.length ?? "all",
-      limit: requestLimit,
+      limit: safeLimit,
       hasCursor: !!startAfterPublishedAt,
     });
 
@@ -1179,8 +1394,6 @@ export const getArticles = onCall<GetArticlesData>(
       query = query.startAfter(Timestamp.fromDate(startAfterDate));
     }
 
-    // Limit (clamped 1-50)
-    const safeLimit = Math.max(1, Math.min(requestLimit, 50));
     query = query.limit(safeLimit);
 
     const snapshot = await query.get();
@@ -2103,6 +2316,985 @@ function serializeSignal(s: SignalItem) {
 }
 
 // ============================================================================
+// Industry Pulse — Deterministic Snapshot Engine + Structured Narrative
+// ============================================================================
+
+/** 24 hours in milliseconds — freshness threshold for cached snapshots */
+const SNAPSHOT_FRESHNESS_MS = 24 * 60 * 60 * 1000;
+
+/** Window sizes that the daily scheduler generates */
+const PULSE_WINDOW_SIZES = [7, 30] as const;
+
+// ---- Structured Narrative — JSON schema for OpenAI structured output ----
+
+const PULSE_NARRATIVE_SCHEMA = {
+  type: "object" as const,
+  properties: {
+    headline: {
+      type: "string",
+      description:
+        "A single concise sentence (≤120 chars) summarizing the dominant P&C market signal this window. Written for a CRO audience. No filler, no date preamble.",
+    },
+    bullets: {
+      type: "array",
+      items: { type: "string" },
+      minItems: 3,
+      maxItems: 5,
+      description:
+        "3–5 insight bullets. Each must reference a specific driver (carrier action, CAT event, ruling, earnings, rate filing). Use standard P&C terminology. No generic macro commentary.",
+    },
+    themes: {
+      type: "array",
+      items: { type: "string" },
+      minItems: 2,
+      maxItems: 4,
+      description:
+        "2–4 short theme labels (2–4 words each) capturing the overarching market themes. Examples: 'CAT Loss Acceleration', 'Tort Reform Momentum', 'Reinsurance Capacity Tightening'.",
+    },
+    drivers: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          source: {
+            type: "string",
+            description: "Publication or source name (e.g., 'Insurance Journal', 'AM Best').",
+          },
+          title: {
+            type: "string",
+            description: "Article or report title that backs a bullet or theme.",
+          },
+          url: {
+            type: "string",
+            description: "URL to the original article. Use a plausible URL only if you are confident; otherwise use an empty string.",
+          },
+        },
+        required: ["source", "title", "url"],
+        additionalProperties: false,
+      },
+      description:
+        "Concrete driver references. Each entry cites a real article or report that supports one of the bullets or themes. Include 3–6 drivers.",
+    },
+  },
+  required: ["headline", "bullets", "themes", "drivers"],
+  additionalProperties: false,
+};
+
+const PULSE_NARRATIVE_SYSTEM = `You are a senior P&C insurance market analyst producing a structured signal intelligence brief for CROs and VP-level underwriting leadership.
+
+Rules:
+- "headline": 1 sentence, ≤120 characters. Name the most significant market shift. No date preamble ("This week…").
+- "bullets": 3–5 items. Each MUST cite a concrete driver — a specific carrier, event, ruling, loss figure, or regulatory action. Never say "various factors", "ongoing trends", or "market dynamics". Use P&C terminology: combined ratio, loss development, rate adequacy, CAT loading, attachment point, etc.
+- "themes": 2–4 short labels (2–4 words each). These are the overarching patterns, not individual topics.
+- "drivers": 3–6 references to real articles or reports that support your bullets. Use the source names and titles from the context provided. Only cite sources that appear in the input.
+- Keep total output under 600 tokens.`;
+
+/** Response shape from OpenAI structured output */
+interface PulseNarrativeAIResponse {
+  headline: string;
+  bullets: string[];
+  themes: string[];
+  drivers: Array<{ source: string; title: string; url: string }>;
+}
+
+/**
+ * Generate a structured market narrative from snapshot data + recent brief context.
+ *
+ * Uses the snapshot's rising/falling/stable topics as signal input and
+ * recent brief executive summaries as grounding context.
+ * Fetches recent briefs with a minimal field mask (executiveSummary + topics + sourcesUsed).
+ *
+ * @returns PulseNarrativeDoc or null if generation fails (non-critical)
+ */
+async function generatePulseNarrative(
+  snapshotDoc: PulseSnapshotDoc,
+  label: string
+): Promise<PulseNarrativeDoc | null> {
+  const { windowDays, dateKey, rising, falling, stable } = snapshotDoc;
+
+  // Skip if no meaningful signals to narrate
+  if (rising.length === 0 && falling.length === 0 && stable.length === 0) {
+    console.log(`[${label}] No topics to narrate, skipping`);
+    return null;
+  }
+
+  // ---- Fetch recent brief context (executiveSummary + topics + sourcesUsed) ----
+  const contextDays = Math.min(windowDays, 7);
+  const recentDates = dateRange(dateKey, contextDays);
+  const contextRefs = recentDates.map((d) => db.collection("briefs").doc(d));
+  const contextDocs = contextRefs.length > 0
+    ? await db.getAll(...contextRefs, { fieldMask: ["executiveSummary", "topics", "sourcesUsed"] })
+    : [];
+
+  const contextBriefs: Array<{ date: string; summary: string[]; topics: string[]; sources: string[] }> = [];
+  for (const doc of contextDocs) {
+    if (!doc.exists) continue;
+    const data = doc.data() as Pick<Brief, "executiveSummary" | "topics" | "sourcesUsed">;
+    contextBriefs.push({
+      date: doc.id,
+      summary: data.executiveSummary || [],
+      topics: data.topics || [],
+      sources: (data.sourcesUsed || []).map((s: { name: string }) => s.name),
+    });
+  }
+
+  // Build compact context string
+  const contextStr = contextBriefs
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .map(
+      (b) =>
+        `[${b.date}]\nSummary: ${b.summary.join(" | ")}\nTopics: ${b.topics.join(", ")}\nSources: ${b.sources.join(", ")}`
+    )
+    .join("\n\n");
+
+  // Build signal summary for the prompt
+  const fmtTopic = (t: PulseSnapshotDoc["rising"][number]) =>
+    `${t.displayName} (${t.type}, momentum=${t.momentum > 0 ? "+" : ""}${t.momentum}, mentions=${t.mentions}, days=${t.daysPresent})`;
+
+  const risingStr = rising.slice(0, 8).map(fmtTopic).join("\n  ");
+  const fallingStr = falling.slice(0, 5).map(fmtTopic).join("\n  ");
+  const stableStr = stable.slice(0, 5).map(fmtTopic).join("\n  ");
+
+  let signalBlock = "";
+  if (risingStr) signalBlock += `RISING:\n  ${risingStr}\n`;
+  if (fallingStr) signalBlock += `FALLING:\n  ${fallingStr}\n`;
+  if (stableStr) signalBlock += `STABLE:\n  ${stableStr}\n`;
+
+  // Count unique sources for the response
+  const allSourceNames = new Set<string>();
+  for (const b of contextBriefs) {
+    for (const s of b.sources) allSourceNames.add(s);
+  }
+
+  try {
+    const openai = getOpenAIClient();
+    const aiResponse = await withRetry(
+      () =>
+        openai.responses.create({
+          model: AI_MODEL,
+          max_output_tokens: 800,
+          input: [
+            { role: "system", content: PULSE_NARRATIVE_SYSTEM },
+            {
+              role: "user",
+              content: `Window: ${windowDays}D ending ${dateKey}\n\nRecent brief context:\n${contextStr}\n\nPulse signals:\n${signalBlock}\nGenerate the structured narrative.`,
+            },
+          ],
+          text: {
+            format: {
+              type: "json_schema",
+              name: "pulse_narrative",
+              schema: PULSE_NARRATIVE_SCHEMA,
+              strict: true,
+            },
+          },
+        }),
+      { maxRetries: 2, baseDelayMs: 1000, label: `${label}/narrative` }
+    );
+
+    const parsed: PulseNarrativeAIResponse = JSON.parse(aiResponse.output_text);
+
+    const narrative: PulseNarrativeDoc = {
+      headline: parsed.headline,
+      bullets: parsed.bullets.slice(0, 5),
+      themes: parsed.themes.slice(0, 4),
+      drivers: parsed.drivers.slice(0, 6).map((d) => ({
+        source: d.source,
+        title: d.title,
+        url: d.url || "",
+      })),
+      sourcesUsed: allSourceNames.size,
+    };
+
+    console.log(
+      `[${label}] Narrative generated: "${narrative.headline.slice(0, 60)}…" ` +
+        `(${narrative.bullets.length} bullets, ${narrative.themes.length} themes, ${narrative.drivers.length} drivers)`
+    );
+
+    return narrative;
+  } catch (error) {
+    console.error(
+      `[${label}] Narrative generation failed (non-critical):`,
+      error instanceof Error ? error.message : "Unknown error"
+    );
+    return null;
+  }
+}
+
+// ---- Shared internal: fetch briefs + compute + narrate + write snapshot ----
+
+interface PulseSnapshotResult {
+  windowDays: number;
+  dateKey: string;
+  generatedAt: string; // ISO string
+  totalTopics: number;
+  rising: PulseSnapshotDoc["rising"];
+  falling: PulseSnapshotDoc["falling"];
+  stable: PulseSnapshotDoc["stable"];
+  narrative: PulseNarrativeDoc | null;
+}
+
+/**
+ * Core pulse snapshot generation for a single window.
+ *
+ * 1. Redundancy guard: if a fresh snapshot already exists for this dateKey
+ *    AND windowDays, returns it without recomputing (prevents concurrent
+ *    scheduler + callable races and same-day re-runs).
+ * 2. Fetches briefs (topics + sourcesUsed only) across 2×windowDays using
+ *    field-mask getAll() to minimize read bandwidth.
+ * 3. Computes the deterministic snapshot via computePulseSnapshot().
+ * 4. Generates a structured AI narrative from snapshot signals + brief context.
+ * 5. Atomically overwrites pulseSnapshots/{windowDays} (including narrative).
+ *
+ * Narrative generation is non-critical — a failure produces narrative=null
+ * but does not prevent the snapshot from being written.
+ *
+ * @param windowDays  - Comparison window size (e.g., 7 or 30)
+ * @param dateKey     - Reference date yyyy-mm-dd (end of recent window)
+ * @param label       - Log prefix for structured logging
+ * @param forceRegen  - If true, skip redundancy guard and always recompute
+ * @returns The generated snapshot payload with narrative
+ */
+async function generatePulseSnapshotForWindow(
+  windowDays: number,
+  dateKey: string,
+  label: string,
+  forceRegen: boolean = false
+): Promise<PulseSnapshotResult> {
+  const startMs = Date.now();
+
+  const snapshotDocId = String(windowDays);
+  const snapshotRef = db.collection("pulseSnapshots").doc(snapshotDocId);
+
+  // ---- Redundancy guard: skip recompute if snapshot is fresh for this dateKey ----
+  if (!forceRegen) {
+    const existingDoc = await snapshotRef.get();
+    if (existingDoc.exists) {
+      const existing = existingDoc.data() as PulseSnapshotDoc;
+      const generatedAtMs = existing.generatedAt?.toDate?.()?.getTime() ?? 0;
+      const ageMs = Date.now() - generatedAtMs;
+
+      if (existing.dateKey === dateKey && ageMs < SNAPSHOT_FRESHNESS_MS) {
+        console.log(
+          `[${label}] Redundancy guard: fresh snapshot already exists ` +
+            `(dateKey=${existing.dateKey}, age=${Math.round(ageMs / 60_000)}m, ` +
+            `topics=${existing.totalTopics}, durationMs=${Date.now() - startMs})`
+        );
+        return {
+          windowDays: existing.windowDays,
+          dateKey: existing.dateKey,
+          generatedAt: existing.generatedAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
+          totalTopics: existing.totalTopics,
+          rising: existing.rising,
+          falling: existing.falling,
+          stable: existing.stable,
+          narrative: existing.narrative || null,
+        };
+      }
+    }
+  }
+
+  // ---- Fetch briefs over the full 2×windowDays range ----
+  const fetchStartMs = Date.now();
+  const allDates = dateRange(dateKey, windowDays * 2);
+  const allDatesArr = [...new Set(allDates)];
+
+  // Batch fetch using getAll with field mask — only read topics + sourcesUsed
+  const briefInputs: BriefInput[] = [];
+  const dateBatches: string[][] = [];
+
+  for (let i = 0; i < allDatesArr.length; i += 30) {
+    dateBatches.push(allDatesArr.slice(i, i + 30));
+  }
+
+  for (const batch of dateBatches) {
+    const refs = batch.map((d) => db.collection("briefs").doc(d));
+    if (refs.length === 0) continue;
+    const docs = await db.getAll(
+      ...refs,
+      { fieldMask: ["topics", "sourcesUsed"] }
+    );
+    for (const doc of docs) {
+      if (!doc.exists) continue;
+      const data = doc.data() as Pick<Brief, "topics" | "sourcesUsed">;
+      if (data.topics && data.topics.length > 0) {
+        briefInputs.push({
+          date: doc.id,
+          topics: data.topics,
+          sourceIds: (data.sourcesUsed || []).map(
+            (s: { sourceId: string }) => s.sourceId
+          ),
+        });
+      }
+    }
+  }
+
+  const fetchDurationMs = Date.now() - fetchStartMs;
+
+  // ---- Compute deterministic snapshot ----
+  const computeStartMs = Date.now();
+  const snapshot = computePulseSnapshot(briefInputs, dateKey, windowDays);
+  const computeDurationMs = Date.now() - computeStartMs;
+
+  // ---- Serialize PulseTopics for Firestore ----
+  const serializeTopic = (t: typeof snapshot.rising[number]): PulseSnapshotDoc["rising"][number] => ({
+    key: t.key,
+    displayName: t.displayName,
+    type: t.type,
+    mentions: t.mentions,
+    baselineMentions: t.baselineMentions,
+    momentum: t.momentum,
+    daysPresent: t.daysPresent,
+    uniqueSources: t.uniqueSources,
+    trendSeries: t.trendSeries,
+  });
+
+  // ---- Build snapshot doc (without narrative first for the AI call) ----
+  const now = Timestamp.now();
+  const snapshotDoc: PulseSnapshotDoc = {
+    windowDays: snapshot.windowDays,
+    dateKey: snapshot.dateKey,
+    generatedAt: now,
+    totalTopics: snapshot.totalTopics,
+    rising: snapshot.rising.map(serializeTopic),
+    falling: snapshot.falling.map(serializeTopic),
+    stable: snapshot.stable.map(serializeTopic),
+    narrative: null,
+  };
+
+  // ---- Generate structured narrative (non-critical) ----
+  const narrativeStartMs = Date.now();
+  const narrative = await generatePulseNarrative(snapshotDoc, label);
+  const narrativeDurationMs = Date.now() - narrativeStartMs;
+  snapshotDoc.narrative = narrative;
+
+  // ---- Estimate doc size for logging ----
+  const docSizeEstimate = JSON.stringify(snapshotDoc).length;
+
+  // ---- Atomic write to Firestore ----
+  await snapshotRef.set(snapshotDoc);
+
+  const totalDurationMs = Date.now() - startMs;
+
+  console.log(
+    `[${label}] ✓ Wrote pulseSnapshots/${snapshotDocId}`,
+    JSON.stringify({
+      dateKey: snapshot.dateKey,
+      windowDays,
+      totalTopics: snapshot.totalTopics,
+      rising: snapshot.rising.length,
+      falling: snapshot.falling.length,
+      stable: snapshot.stable.length,
+      narrative: narrative ? "yes" : "none",
+      briefsFetched: briefInputs.length,
+      briefDatesQueried: allDatesArr.length,
+      docSizeBytes: docSizeEstimate,
+      fetchMs: fetchDurationMs,
+      computeMs: computeDurationMs,
+      narrativeMs: narrativeDurationMs,
+      totalMs: totalDurationMs,
+    })
+  );
+
+  return {
+    windowDays: snapshot.windowDays,
+    dateKey: snapshot.dateKey,
+    generatedAt: now.toDate().toISOString(),
+    totalTopics: snapshot.totalTopics,
+    rising: snapshotDoc.rising,
+    falling: snapshotDoc.falling,
+    stable: snapshotDoc.stable,
+    narrative,
+  };
+}
+
+// ---- Scheduled daily generation ----
+
+/**
+ * Scheduled function to regenerate Pulse snapshots daily.
+ *
+ * Runs at 1:30 AM ET (off-peak, after the midnight brief generation).
+ * Computes 7D and 30D snapshots with structured narrative, then overwrites atomically.
+ */
+export const runDailyPulseSnapshots = onSchedule(
+  {
+    schedule: "30 1 * * *", // 1:30 AM ET daily
+    timeZone: "America/New_York",
+    secrets: [openaiApiKey],
+    memory: "256MiB",
+    timeoutSeconds: 120,
+  },
+  async () => {
+    const dateKey = getTodayDateET();
+    console.log(`[runDailyPulseSnapshots] Starting for ${dateKey}`);
+
+    const results: Array<{ windowDays: number; ok: boolean; error?: string; totalTopics?: number }> = [];
+
+    for (const windowDays of PULSE_WINDOW_SIZES) {
+      try {
+        const result = await generatePulseSnapshotForWindow(
+          windowDays,
+          dateKey,
+          `runDailyPulseSnapshots/w${windowDays}`
+        );
+        results.push({
+          windowDays,
+          ok: true,
+          totalTopics: result.totalTopics,
+        });
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : "Unknown error";
+        console.error(
+          `[runDailyPulseSnapshots] ✗ FAILURE for w${windowDays}:`,
+          msg
+        );
+        results.push({ windowDays, ok: false, error: msg });
+      }
+    }
+
+    const allOk = results.every((r) => r.ok);
+    if (allOk) {
+      console.log(
+        `[runDailyPulseSnapshots] ✓ SUCCESS for ${dateKey}:`,
+        results.map((r) => `w${r.windowDays}=${r.totalTopics}T`).join(", ")
+      );
+    } else {
+      const failed = results.filter((r) => !r.ok);
+      console.error(
+        `[runDailyPulseSnapshots] ⚠ PARTIAL for ${dateKey}: ${failed.length}/${results.length} windows failed`
+      );
+      throw new Error(
+        `Pulse snapshot generation failed for: ${failed.map((r) => `w${r.windowDays}`).join(", ")}`
+      );
+    }
+  }
+);
+
+// ---- On-demand callable ----
+
+interface GetPulseSnapshotData {
+  windowDays?: number;
+}
+
+/**
+ * Callable function to get a Pulse snapshot on demand.
+ *
+ * Behavior:
+ * - If a snapshot exists for this windowDays AND was generated within the
+ *   last 24 hours, return it immediately (cache hit, including narrative).
+ * - Otherwise, compute a fresh snapshot with narrative, write to Firestore,
+ *   and return.
+ *
+ * @param windowDays - Comparison window size (default: 7, max: 30)
+ * @returns PulseSnapshot with rising, falling, stable topic lists + narrative
+ */
+export const getPulseSnapshot = onCall<GetPulseSnapshotData>(
+  {
+    secrets: [openaiApiKey],
+    memory: "256MiB",
+    timeoutSeconds: 60,
+  },
+  async (request) => {
+    const startMs = Date.now();
+    const { windowDays: rawWindow } = request.data || {};
+
+    // Validate & default windowDays
+    const windowDays = Math.max(1, Math.min(Number(rawWindow) || 7, 30));
+
+    console.log(`[getPulseSnapshot] windowDays=${windowDays}`);
+
+    // ---- Check for a recent cached snapshot (single Firestore read) ----
+    const snapshotDocId = String(windowDays);
+    const snapshotRef = db.collection("pulseSnapshots").doc(snapshotDocId);
+    const existingDoc = await snapshotRef.get();
+
+    if (existingDoc.exists) {
+      const existing = existingDoc.data() as PulseSnapshotDoc;
+      const generatedAtMs = existing.generatedAt?.toDate?.()?.getTime() ?? 0;
+      const ageMs = Date.now() - generatedAtMs;
+
+      if (ageMs < SNAPSHOT_FRESHNESS_MS) {
+        const readMs = Date.now() - startMs;
+        console.log(
+          "[getPulseSnapshot] Cache hit",
+          JSON.stringify({
+            windowDays,
+            dateKey: existing.dateKey,
+            generatedAt: existing.generatedAt?.toDate?.()?.toISOString() ?? null,
+            ageMinutes: Math.round(ageMs / 60_000),
+            totalTopics: existing.totalTopics,
+            rising: existing.rising.length,
+            falling: existing.falling.length,
+            stable: existing.stable.length,
+            hasNarrative: !!existing.narrative,
+            readMs,
+          })
+        );
+        return {
+          windowDays: existing.windowDays,
+          dateKey: existing.dateKey,
+          generatedAt:
+            existing.generatedAt?.toDate?.()?.toISOString() ??
+            new Date().toISOString(),
+          totalTopics: existing.totalTopics,
+          rising: existing.rising,
+          falling: existing.falling,
+          stable: existing.stable,
+          narrative: existing.narrative || null,
+        };
+      }
+
+      console.log(
+        `[getPulseSnapshot] Stale snapshot for w${windowDays} ` +
+          `(age=${Math.round(ageMs / 60_000)}m, dateKey=${existing.dateKey}), recomputing`
+      );
+    } else {
+      console.log(`[getPulseSnapshot] No snapshot found for w${windowDays}, computing`);
+    }
+
+    // ---- Snapshot missing or stale — compute fresh ----
+    // The redundancy guard inside generatePulseSnapshotForWindow will prevent
+    // duplicate work if another caller is concurrently generating.
+    const dateKey = getTodayDateET();
+
+    try {
+      const result = await generatePulseSnapshotForWindow(
+        windowDays,
+        dateKey,
+        "getPulseSnapshot"
+      );
+      console.log(
+        "[getPulseSnapshot] Computed fresh snapshot",
+        JSON.stringify({ windowDays, dateKey, totalMs: Date.now() - startMs })
+      );
+      return result;
+    } catch (error) {
+      console.error(
+        "[getPulseSnapshot] Computation failed:",
+        error instanceof Error ? error.message : "Unknown error"
+      );
+      throw new HttpsError(
+        "internal",
+        "Failed to generate pulse snapshot. Please try again."
+      );
+    }
+  }
+);
+
+// ---- Topic drilldown callable ----
+
+interface GetPulseTopicDetailData {
+  windowDays?: number;
+  topicKey?: string;
+}
+
+interface PulseTopicDriverResult {
+  articleId: string;
+  source: string;
+  title: string;
+  url: string;
+  publishedAt: string; // ISO string
+}
+
+/**
+ * Callable function to fetch detail data for a single Pulse topic.
+ *
+ * Strategy (designed for minimal reads):
+ * 1. Single read of the cached pulseSnapshots/{windowDays} doc — extracts the
+ *    topic metrics (key, displayName, type, mentions, etc.).
+ * 2. Lightweight query for briefs in the recent window — field-masked to
+ *    ["topics", "sourceArticleIds"] only. Filters briefs whose topic array
+ *    contains the canonical key, then collects article IDs.
+ * 3. Batch fetch of article metadata — field-masked to
+ *    ["title", "sourceName", "url", "publishedAt"] only. Returns top N
+ *    articles sorted by publishedAt desc.
+ *
+ * No AI calls. No full article body reads.
+ *
+ * @param windowDays - Comparison window size (default: 7, max: 30)
+ * @param topicKey   - Canonical topic key to drill into
+ * @returns Topic metrics + driver articles
+ */
+export const getPulseTopicDetail = onCall<GetPulseTopicDetailData>(
+  {
+    memory: "256MiB",
+    timeoutSeconds: 30,
+  },
+  async (request) => {
+    const startMs = Date.now();
+    const { windowDays: rawWindow, topicKey } = request.data || {};
+
+    // ---- Validate inputs ----
+    if (!topicKey || typeof topicKey !== "string" || topicKey.trim().length === 0) {
+      throw new HttpsError("invalid-argument", "topicKey is required");
+    }
+
+    const windowDays = Math.max(1, Math.min(Number(rawWindow) || 7, 30));
+    const normalizedKey = topicKey.trim().toLowerCase();
+
+    // ---- Step 1: Single Firestore read — snapshot is the source of truth ----
+    const snapshotDocId = String(windowDays);
+    const snapshotRef = db.collection("pulseSnapshots").doc(snapshotDocId);
+    const snapshotDoc = await snapshotRef.get();
+    const snapshotReadMs = Date.now() - startMs;
+
+    if (!snapshotDoc.exists) {
+      throw new HttpsError(
+        "not-found",
+        `No pulse snapshot found for windowDays=${windowDays}. Generate one first.`
+      );
+    }
+
+    const snapshot = snapshotDoc.data() as PulseSnapshotDoc;
+
+    // Validate snapshot freshness — warn but don't block (data is still usable)
+    const snapshotAgeMs = Date.now() - (snapshot.generatedAt?.toDate?.()?.getTime() ?? 0);
+    if (snapshotAgeMs > SNAPSHOT_FRESHNESS_MS) {
+      console.warn(
+        `[getPulseTopicDetail] Snapshot is stale (age=${Math.round(snapshotAgeMs / 60_000)}m), ` +
+          "returning best-available data"
+      );
+    }
+
+    // Find the topic across rising, falling, stable lists
+    const allTopics = [...snapshot.rising, ...snapshot.falling, ...snapshot.stable];
+    const topic = allTopics.find((t) => t.key === normalizedKey);
+
+    if (!topic) {
+      throw new HttpsError(
+        "not-found",
+        `Topic "${normalizedKey}" not found in the ${windowDays}D pulse snapshot.`
+      );
+    }
+
+    // ---- Step 2: Resolve driver articles from brief metadata ----
+    // Field-masked brief reads (topics + sourceArticleIds) → field-masked article reads.
+    // Both use getAll() batches — no N+1 queries.
+    const briefStartMs = Date.now();
+    const recentDates = dateRange(snapshot.dateKey, windowDays);
+    const uniqueDates = [...new Set(recentDates)];
+
+    const articleIdSet = new Set<string>();
+    const briefBatches: string[][] = [];
+
+    for (let i = 0; i < uniqueDates.length; i += 30) {
+      briefBatches.push(uniqueDates.slice(i, i + 30));
+    }
+
+    for (const batch of briefBatches) {
+      const refs = batch.map((d) => db.collection("briefs").doc(d));
+      if (refs.length === 0) continue;
+
+      const docs = await db.getAll(
+        ...refs,
+        { fieldMask: ["topics", "sourceArticleIds"] }
+      );
+
+      for (const doc of docs) {
+        if (!doc.exists) continue;
+        const data = doc.data() as Pick<Brief, "topics" | "sourceArticleIds">;
+        if (!data.topics || data.topics.length === 0) continue;
+
+        const briefHasTopic = data.topics.some(
+          (raw) => canonicalTopicKey(raw) === normalizedKey
+        );
+
+        if (briefHasTopic && data.sourceArticleIds) {
+          for (const aid of data.sourceArticleIds) {
+            articleIdSet.add(aid);
+          }
+        }
+      }
+    }
+
+    const briefReadMs = Date.now() - briefStartMs;
+
+    // ---- Step 3: Batch fetch article metadata (top N by publishedAt) ----
+    const articleStartMs = Date.now();
+    const MAX_DRIVERS = 10;
+    const drivers: PulseTopicDriverResult[] = [];
+
+    if (articleIdSet.size > 0) {
+      const articleIds = [...articleIdSet];
+      const articleBatches: string[][] = [];
+
+      for (let i = 0; i < articleIds.length; i += 30) {
+        articleBatches.push(articleIds.slice(i, i + 30));
+      }
+
+      const rawDrivers: Array<{
+        articleId: string;
+        source: string;
+        title: string;
+        url: string;
+        publishedAt: Date;
+      }> = [];
+
+      for (const batch of articleBatches) {
+        const refs = batch.map((id) => db.collection("articles").doc(id));
+        if (refs.length === 0) continue;
+
+        const docs = await db.getAll(
+          ...refs,
+          { fieldMask: ["title", "sourceName", "url", "publishedAt"] }
+        );
+
+        for (const doc of docs) {
+          if (!doc.exists) continue;
+          const data = doc.data() as Pick<Article, "title" | "sourceName" | "url" | "publishedAt">;
+          if (!data.title) continue;
+
+          rawDrivers.push({
+            articleId: doc.id,
+            source: data.sourceName || "",
+            title: data.title,
+            url: data.url || "",
+            publishedAt: data.publishedAt?.toDate?.() ?? new Date(0),
+          });
+        }
+      }
+
+      // Sort by publishedAt desc and take top N
+      rawDrivers.sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime());
+
+      for (const d of rawDrivers.slice(0, MAX_DRIVERS)) {
+        drivers.push({
+          articleId: d.articleId,
+          source: d.source,
+          title: d.title,
+          url: d.url,
+          publishedAt: d.publishedAt.toISOString(),
+        });
+      }
+    }
+
+    const articleReadMs = Date.now() - articleStartMs;
+    const totalMs = Date.now() - startMs;
+
+    console.log(
+      "[getPulseTopicDetail] Drilldown complete",
+      JSON.stringify({
+        topicKey: normalizedKey,
+        displayName: topic.displayName,
+        windowDays,
+        snapshotDateKey: snapshot.dateKey,
+        snapshotAgeMinutes: Math.round(snapshotAgeMs / 60_000),
+        candidateArticles: articleIdSet.size,
+        driversReturned: drivers.length,
+        briefDatesQueried: uniqueDates.length,
+        snapshotReadMs,
+        briefReadMs,
+        articleReadMs,
+        totalMs,
+      })
+    );
+
+    return {
+      key: topic.key,
+      displayName: topic.displayName,
+      type: topic.type,
+      mentions: topic.mentions,
+      baselineMentions: topic.baselineMentions,
+      momentum: topic.momentum,
+      daysPresent: topic.daysPresent,
+      uniqueSources: topic.uniqueSources,
+      trendSeries: topic.trendSeries,
+      drivers,
+    };
+  }
+);
+
+// ============================================================================
+// Topic Watchlist — Pin / Unpin + Enriched Retrieval
+// ============================================================================
+
+interface ToggleWatchlistTopicData {
+  topicKey?: string;
+  windowDays?: number;
+}
+
+/**
+ * Toggle a topic on the authenticated user's watchlist.
+ *
+ * - If the topic is NOT in the watchlist, adds it (using snapshot data for
+ *   displayName and type so the watchlist entry is self-describing).
+ * - If the topic IS in the watchlist, removes it.
+ *
+ * Returns { action: "added" | "removed", key }.
+ *
+ * Idempotent — repeated calls alternate between add/remove deterministically.
+ * Uses a single snapshot read + a single watchlist doc read/write.
+ * Document ID = topicKey, so no duplicates are possible by construction.
+ */
+export const toggleWatchlistTopic = onCall<ToggleWatchlistTopicData>(
+  {
+    memory: "256MiB",
+    timeoutSeconds: 15,
+  },
+  async (request) => {
+    // ---- Auth ----
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentication required.");
+    }
+
+    const uid = request.auth.uid;
+    const { topicKey, windowDays: rawWindow } = request.data || {};
+
+    // ---- Validate inputs ----
+    if (!topicKey || typeof topicKey !== "string" || topicKey.trim().length === 0) {
+      throw new HttpsError("invalid-argument", "topicKey is required.");
+    }
+
+    const normalizedKey = topicKey.trim().toLowerCase();
+    const windowDays = Math.max(1, Math.min(Number(rawWindow) || 7, 30));
+
+    const watchlistRef = db
+      .collection("users")
+      .doc(uid)
+      .collection("watchlist")
+      .doc(normalizedKey);
+
+    const existingDoc = await watchlistRef.get();
+
+    if (existingDoc.exists) {
+      // ---- Remove ----
+      await watchlistRef.delete();
+      console.log(`[toggleWatchlistTopic] Removed "${normalizedKey}" for uid=${uid}`);
+      return { action: "removed" as const, key: normalizedKey };
+    }
+
+    // ---- Add — resolve displayName + type from snapshot ----
+    let displayName = normalizedKey;
+    let topicType: PulseSnapshotDoc["rising"][number]["type"] = "lob";
+
+    const snapshotDocId = String(windowDays);
+    const snapshotRef = db.collection("pulseSnapshots").doc(snapshotDocId);
+    const snapshotDoc = await snapshotRef.get();
+
+    if (snapshotDoc.exists) {
+      const snapshot = snapshotDoc.data() as PulseSnapshotDoc;
+      const allTopics = [...snapshot.rising, ...snapshot.falling, ...snapshot.stable];
+      const match = allTopics.find((t) => t.key === normalizedKey);
+      if (match) {
+        displayName = match.displayName;
+        topicType = match.type;
+      }
+    }
+
+    const watchlistDoc = {
+      key: normalizedKey,
+      displayName,
+      type: topicType,
+      createdAt: FieldValue.serverTimestamp(),
+    };
+
+    await watchlistRef.set(watchlistDoc);
+    console.log(`[toggleWatchlistTopic] Added "${normalizedKey}" for uid=${uid}`);
+    return { action: "added" as const, key: normalizedKey };
+  }
+);
+
+// ---- Enriched watchlist retrieval ----
+
+interface GetWatchlistTopicsData {
+  windowDays?: number;
+}
+
+/**
+ * Return the authenticated user's watchlist topics enriched with live
+ * snapshot metrics from pulseSnapshots/{windowDays}.
+ *
+ * Read strategy (2 reads total):
+ * 1. users/{uid}/watchlist — full subcollection read (small, bounded by user actions)
+ * 2. pulseSnapshots/{windowDays} — single doc read for metric enrichment
+ *
+ * No snapshot recomputation. If the snapshot doesn't exist or a watchlisted
+ * topic is absent from the snapshot, metrics come back as null with
+ * hasMetrics=false.
+ */
+export const getWatchlistTopics = onCall<GetWatchlistTopicsData>(
+  {
+    memory: "256MiB",
+    timeoutSeconds: 15,
+  },
+  async (request) => {
+    // ---- Auth ----
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentication required.");
+    }
+
+    const uid = request.auth.uid;
+    const { windowDays: rawWindow } = request.data || {};
+    const windowDays = Math.max(1, Math.min(Number(rawWindow) || 7, 30));
+
+    console.log(`[getWatchlistTopics] uid=${uid} windowDays=${windowDays}`);
+
+    // ---- Read 1: User's watchlist ----
+    const watchlistSnap = await db
+      .collection("users")
+      .doc(uid)
+      .collection("watchlist")
+      .orderBy("createdAt", "asc")
+      .get();
+
+    if (watchlistSnap.empty) {
+      return { topics: [], windowDays, snapshotAvailable: false };
+    }
+
+    // ---- Read 2: Pulse snapshot for metric enrichment ----
+    const snapshotDocId = String(windowDays);
+    const snapshotRef = db.collection("pulseSnapshots").doc(snapshotDocId);
+    const snapshotDoc = await snapshotRef.get();
+
+    // Build a lookup map from the snapshot (key → topic metrics)
+    const metricsMap = new Map<string, PulseSnapshotDoc["rising"][number]>();
+    let snapshotAvailable = false;
+
+    if (snapshotDoc.exists) {
+      snapshotAvailable = true;
+      const snapshot = snapshotDoc.data() as PulseSnapshotDoc;
+      for (const t of [...snapshot.rising, ...snapshot.falling, ...snapshot.stable]) {
+        metricsMap.set(t.key, t);
+      }
+    }
+
+    // ---- Enrich each watchlist entry ----
+    const topics = watchlistSnap.docs.map((doc) => {
+      const data = doc.data() as {
+        key: string;
+        displayName: string;
+        type: string;
+        createdAt?: Timestamp;
+      };
+
+      const metrics = metricsMap.get(data.key);
+      const hasMetrics = !!metrics;
+
+      return {
+        key: data.key,
+        displayName: metrics?.displayName ?? data.displayName,
+        type: metrics?.type ?? data.type,
+        createdAt: data.createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
+        hasMetrics,
+        mentions: metrics?.mentions ?? null,
+        baselineMentions: metrics?.baselineMentions ?? null,
+        momentum: metrics?.momentum ?? null,
+        daysPresent: metrics?.daysPresent ?? null,
+        uniqueSources: metrics?.uniqueSources ?? null,
+        trendSeries: metrics?.trendSeries ?? null,
+      };
+    });
+
+    console.log(
+      `[getWatchlistTopics] Returning ${topics.length} watchlist topics ` +
+        `(${topics.filter((t) => t.hasMetrics).length} enriched, snapshot=${snapshotAvailable ? "yes" : "no"})`
+    );
+
+    return { topics, windowDays, snapshotAvailable };
+  }
+);
+
+// ============================================================================
 // Account Deletion (App Store Guideline 5.1.1(v))
 // ============================================================================
 
@@ -2117,6 +3309,7 @@ function serializeSignal(s: SignalItem) {
  *    - users/{uid}/pushTokens/*
  *    - users/{uid}/chatThreads/* and subcollection messages
  *    - users/{uid}/rateLimits/*
+ *    - users/{uid}/watchlist/*
  *    - users/{uid} document itself
  * 3. Deletes the user from Firebase Auth
  *
@@ -2196,13 +3389,14 @@ export const deleteAccount = onCall(
 
     try {
       // Delete all user subcollections in parallel for speed
-      const [prefsResult, bookmarksResult, pushTokensResult, chatThreadsResult, rateLimitsResult] =
+      const [prefsResult, bookmarksResult, pushTokensResult, chatThreadsResult, rateLimitsResult, watchlistResult] =
         await Promise.all([
           deleteCollectionBatched(`users/${uid}/prefs`),
           deleteCollectionBatched(`users/${uid}/bookmarks`),
           deleteCollectionBatched(`users/${uid}/pushTokens`),
           deleteCollectionBatched(`users/${uid}/chatThreads`, ["messages"]),
           deleteCollectionBatched(`users/${uid}/rateLimits`),
+          deleteCollectionBatched(`users/${uid}/watchlist`),
         ]);
 
       deletionResults["prefs"] = prefsResult;
@@ -2210,6 +3404,7 @@ export const deleteAccount = onCall(
       deletionResults["pushTokens"] = pushTokensResult;
       deletionResults["chatThreads"] = chatThreadsResult;
       deletionResults["rateLimits"] = rateLimitsResult;
+      deletionResults["watchlist"] = watchlistResult;
 
       // Delete user profile document
       try {

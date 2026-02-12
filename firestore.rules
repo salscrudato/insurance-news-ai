@@ -106,6 +106,15 @@ service cloud.firestore {
       }
 
       // -----------------------------------------------------------------------
+      // Watchlist Subcollection: users/{uid}/watchlist/{topicKey}
+      // Read: owner only. Write: server-only (via Admin SDK callables).
+      // -----------------------------------------------------------------------
+      match /watchlist/{topicKey} {
+        allow read: if isOwner(uid);
+        allow write: if false; // Managed by toggleWatchlistTopic callable
+      }
+
+      // -----------------------------------------------------------------------
       // Chat Threads Subcollection: users/{uid}/chatThreads/{threadId}
       // Users can read/write their own chat threads
       // -----------------------------------------------------------------------
